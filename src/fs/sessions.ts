@@ -6,7 +6,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { basename } from "node:path";
+import { basename, dirname } from "node:path";
 import { parseSessionContent } from "../parse/claudeCode.js";
 import type { ParseResult } from "../types.js";
 
@@ -15,10 +15,14 @@ function sessionIdFromPath(filePath: string): string {
   return basename(filePath).replace(/\.jsonl$/i, "");
 }
 
-/** JSONL 파일 1개를 읽어 정규화. 읽기 실패는 호출부로 throw. */
+/**
+ * JSONL 파일 1개를 읽어 정규화. 읽기 실패는 호출부로 throw.
+ * projectPath 미지정 시 부모 디렉터리명(프로젝트 슬러그)에서 유도 → 프로젝트별 분석 가능.
+ */
 export async function readSessionFile(filePath: string, projectPath?: string): Promise<ParseResult> {
   const content = await readFile(filePath, "utf-8");
-  const { session, warnings } = parseSessionContent(content, sessionIdFromPath(filePath), projectPath);
+  const project = projectPath ?? basename(dirname(filePath));
+  const { session, warnings } = parseSessionContent(content, sessionIdFromPath(filePath), project);
   return { sessions: [session], warnings };
 }
 

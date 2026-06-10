@@ -8,6 +8,7 @@
 import type { AggregatedMetrics, ModelMetric } from "./metrics.js";
 import { PRICING_TABLE_VERSION } from "../pricing.js";
 import type { Commit } from "../parse/git.js";
+import type { UsageAnalysis } from "./analysis.js";
 
 /** 모델 ID → 짧은 표시명. "claude-opus-4-8" → "Opus". */
 export function shortModelName(model: string): string {
@@ -18,8 +19,9 @@ export function shortModelName(model: string): string {
   return model;
 }
 
-/** 토큰 수를 "38k" 형태로. 1000 미만은 그대로. */
+/** 토큰 수를 "420M" / "38k" 형태로. 1000 미만은 그대로. */
 export function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
   if (n >= 1000) return `${Math.round(n / 1000)}k`;
   return String(n);
 }
@@ -44,8 +46,15 @@ export function renderMetricsBlock(agg: AggregatedMetrics): string {
     return "## AI 사용 메트릭 (자동 추출)\n- 기록된 AI 세션 없음";
   }
 
-  const perModel = agg.byModel
-    .map((m) => `${shortModelName(m.model)} ${formatTokens(displayTokens(m))} tok`)
+  // 짧은 이름(Opus/Sonnet/Haiku)으로 합산해 버전 중복 표기를 없앤다.
+  const familyTokens = new Map<string, number>();
+  for (const m of agg.byModel) {
+    const name = shortModelName(m.model);
+    familyTokens.set(name, (familyTokens.get(name) ?? 0) + displayTokens(m));
+  }
+  const perModel = [...familyTokens.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, tok]) => `${name} ${formatTokens(tok)} tok`)
     .join(" · ");
 
   const duration = formatDuration(agg.totalDurationMs);
@@ -64,6 +73,8 @@ export interface DraftOptions {
   author?: string;
   /** LLM 요약이 실패해 원시 활동만 첨부하는 폴백 모드(§4.4). */
   generationFailed?: boolean;
+  /** LLM이 생성한 "어제 한 일" 산문. 있으면 커밋 목록 대신 이걸 렌더(근거 해시는 함께 표기). */
+  accomplishments?: string;
 }
 
 /** 커밋 1개를 "어제 한 일" 항목으로(커밋 해시 근거 표기, §4.2). */
@@ -95,7 +106,12 @@ export function renderDraft(commits: Commit[], metrics: AggregatedMetrics, opts:
   }
 
   parts.push("## 어제 한 일");
-  if (commits.length === 0) {
+  if (opts.accomplishments && opts.accomplishments.trim() !== "") {
+    parts.push(opts.accomplishments.trim());
+    if (commits.length > 0) {
+      parts.push("", `_근거 커밋: ${commits.map((c) => `\`${c.shortHash}\``).join(", ")}_`);
+    }
+  } else if (commits.length === 0) {
     parts.push("- (커밋 기록 없음 — AI 세션만 있었음)");
   } else {
     for (const c of commits) parts.push(renderCommitItem(c));
@@ -114,5 +130,110 @@ function footer(opts: DraftOptions): string {
     "   메트릭은 로그 토큰에서 산출(활동 시간 아님), 세션은 시작 시각(KST) 기준 귀속, 제출 전 본인 검토가 필요합니다.",
   ];
   void opts;
+  return lines.join("\n");
+}
+
+// ── 개인 사용 분석 문서 렌더 ──────────────────────────────────────────────
+
+/** 비율(0~1)을 너비 width의 막대로. */
+function bar(share: number, width = 20): string {
+  const filled = Math.round(Math.max(0, Math.min(1, share)) * width);
+  return "█".repeat(filled) + "·".repeat(width - filled);
+}
+
+function pct(share: number): string {
+  return `${(share * 100).toFixed(0)}%`;
+}
+
+/** 프로젝트 슬러그를 읽기 쉽게: "...GitHub-AIWS-Front" → "AIWS-Front". */
+export function prettyProject(slug: string): string {
+  const marker = "GitHub-";
+  const i = slug.indexOf(marker);
+  const tail = i >= 0 ? slug.slice(i + marker.length) : slug;
+  return tail.length > 40 ? tail.slice(-40) : tail;
+}
+
+/** 24슬롯 시간대 분포를 한 줄 스파크라인으로. */
+function hourSparkline(byHour: number[]): string {
+  const blocks = "▁▂▃▄▅▆▇█";
+  const max = Math.max(1, ...byHour);
+  return byHour
+    .map((c) => {
+      if (c === 0) return "·";
+      const idx = Math.min(blocks.length - 1, Math.floor((c / max) * (blocks.length - 1)));
+      return blocks[idx];
+    })
+    .join("");
+}
+
+/**
+ * 개인 AI 사용 분석 문서를 렌더한다(서술 자료, 평가 아님).
+ */
+export function renderAnalysis(a: UsageAnalysis, author?: string): string {
+  const who = author ? ` — ${author}` : "";
+  const lines: string[] = [];
+  lines.push(`# AI 사용 분석${who}`);
+  lines.push(`기간: ${a.range.start} ~ ${a.range.end} (KST)`);
+  lines.push("");
+
+  if (a.totals.sessions === 0) {
+    lines.push("이 기간에 기록된 AI 세션이 없습니다.");
+    return lines.join("\n");
+  }
+
+  // 요약.
+  const unknownNote = a.hasUnknownModel ? " (일부 모델 단가 미상)" : "";
+  lines.push("## 요약");
+  lines.push(`- 세션 ${a.totals.sessions}건 · 활동일 ${a.byDay.length}일 · 지속(추정) ${formatDuration(a.totals.durationMs)}`);
+  lines.push(`- 총 토큰 ${formatTokens(a.totals.tokens.input + a.totals.tokens.output + a.totals.tokens.cacheRead + a.totals.tokens.cacheCreation)} · 추정 비용 약 $${a.totals.costUsd.toFixed(2)}${unknownNote}`);
+  if (a.busiestDay) {
+    lines.push(`- 가장 활발한 날: ${a.busiestDay.date} (약 $${a.busiestDay.costUsd.toFixed(2)})`);
+  }
+  lines.push("");
+
+  // 모델 믹스 — 짧은 이름(Opus/Sonnet/Haiku)으로 합산해 버전 중복 줄을 없앤다.
+  lines.push("## 모델 믹스");
+  const familyMap = new Map<string, { tokens: number; cost: number; tokenShare: number; costShare: number }>();
+  for (const m of a.byModel) {
+    const name = shortModelName(m.model);
+    const cur = familyMap.get(name) ?? { tokens: 0, cost: 0, tokenShare: 0, costShare: 0 };
+    cur.tokens += m.displayTokens;
+    cur.cost += m.costUsd;
+    cur.tokenShare += m.tokenShare;
+    cur.costShare += m.costShare;
+    familyMap.set(name, cur);
+  }
+  const families = [...familyMap.entries()].sort((x, y) => y[1].tokenShare - x[1].tokenShare);
+  for (const [name, f] of families) {
+    lines.push(`- ${name.padEnd(7)} ${bar(f.tokenShare)} ${pct(f.tokenShare)} 토큰 · $${f.cost.toFixed(2)} (${pct(f.costShare)} 비용)`);
+  }
+  lines.push("");
+
+  // 일자별 추세(비용).
+  lines.push("## 일자별 (추정 비용)");
+  const maxDayCost = Math.max(...a.byDay.map((d) => d.costUsd), 0.0001);
+  for (const d of a.byDay) {
+    lines.push(`- ${d.date}  ${bar(d.costUsd / maxDayCost, 16)}  $${d.costUsd.toFixed(2)} · 세션 ${d.sessions}`);
+  }
+  lines.push("");
+
+  // 시간대.
+  lines.push("## 시간대 분포 (세션 시작, KST 0~23시)");
+  lines.push("```");
+  lines.push(`0         9         18      23`);
+  lines.push(hourSparkline(a.byHourKst));
+  lines.push("```");
+  lines.push("");
+
+  // 프로젝트별.
+  lines.push("## 프로젝트별");
+  for (const p of a.byProject) {
+    lines.push(`- ${prettyProject(p.project)} — 세션 ${p.sessions} · $${p.costUsd.toFixed(2)}`);
+  }
+  lines.push("");
+
+  lines.push("---");
+  lines.push("⚠️ 이 문서는 *서술*(어떻게 쓰는지)이며 *평가*(잘 쓰는지)가 아닙니다. 토큰·빈도는 양이지 실력이 아닙니다.");
+  lines.push(`   비용은 추정치(단가 v${a.pricingVersion}, 정산액 아님), 세션 시간은 지속(추정)으로 활동 시간이 아닙니다.`);
   return lines.join("\n");
 }

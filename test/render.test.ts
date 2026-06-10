@@ -45,6 +45,15 @@ describe("renderDraft", () => {
     expect(draft).toContain("커밋 기록 없음");
     expect(draft).toContain("## AI 사용 메트릭");
   });
+
+  it("LLM 산문이 있으면 커밋 목록 대신 산문 + 근거 해시를 렌더한다", () => {
+    const draft = renderDraft(sampleCommits, aggregate([sampleSession]), {
+      date: "2026-06-09",
+      accomplishments: "- 멀티라인 tool_result 파싱을 추가했다",
+    });
+    expect(draft).toContain("멀티라인 tool_result 파싱을 추가했다");
+    expect(draft).toContain("근거 커밋: `a3f9c21`");
+  });
 });
 
 describe("renderMetricsBlock", () => {

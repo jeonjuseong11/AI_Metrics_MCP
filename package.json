@@ -1,0 +1,28 @@
+{
+  "name": "aimm",
+  "version": "0.1.0",
+  "description": "AI-Metrics MCP (AIMM) — Claude Code 세션 로그 + Git 커밋 기반 스크럼 초안·AI 사용 메트릭 자동화",
+  "type": "module",
+  "bin": {
+    "aimm": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.42",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

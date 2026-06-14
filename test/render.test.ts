@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { renderDraft, renderMetricsBlock } from "../src/core/render.js";
+import { renderDraft, renderMetricsBlock, renderAnalysis } from "../src/core/render.js";
 import { aggregate } from "../src/core/metrics.js";
 import type { Commit } from "../src/parse/git.js";
 import type { NormalizedSession, TokenTotals } from "../src/types.js";
+import type { UsageAnalysis } from "../src/core/analysis.js";
 
 function tk(p: Partial<TokenTotals>): TokenTotals {
   return { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, ...p };
@@ -63,5 +64,34 @@ describe("renderMetricsBlock", () => {
 
   it("정산액 아님 단서를 항상 붙인다", () => {
     expect(renderMetricsBlock(aggregate([sampleSession]))).toContain("정산액 아님");
+  });
+});
+
+function analysisFixture(): UsageAnalysis {
+  return {
+    range: { start: "2026-06-08", end: "2026-06-14" },
+    totals: { sessions: 5, tokens: { input: 100, output: 50, cacheRead: 200, cacheCreation: 30 }, costUsd: 1.0, durationMs: 60000 },
+    byModel: [{ model: "claude-opus-4-8", displayTokens: 380, costUsd: 1.0, tokenShare: 1, costShare: 1 }],
+    byDay: [{ date: "2026-06-12", sessions: 5, displayTokens: 380, costUsd: 1.0 }],
+    byHourKst: new Array<number>(24).fill(0),
+    byProject: [{ project: "C--Users-jeonj-GitHub-X", sessions: 5, displayTokens: 380, costUsd: 1.0 }],
+    busiestDay: { date: "2026-06-12", sessions: 5, displayTokens: 380, costUsd: 1.0 },
+    hasUnknownModel: false,
+    pricingVersion: "test",
+  };
+}
+
+describe("renderAnalysis 산문 섹션", () => {
+  it("narrative를 주면 '한 주 돌아보기' 섹션을 맨 위에 넣는다", () => {
+    const out = renderAnalysis(analysisFixture(), undefined, "오후에 집중해 Opus를 주로 썼다.");
+    expect(out).toContain("## 한 주 돌아보기");
+    expect(out).toContain("오후에 집중해 Opus를 주로 썼다.");
+    // 산문 섹션이 요약 섹션보다 앞에 온다.
+    expect(out.indexOf("## 한 주 돌아보기")).toBeLessThan(out.indexOf("## 요약"));
+  });
+
+  it("narrative가 없으면 산문 섹션을 넣지 않는다", () => {
+    const out = renderAnalysis(analysisFixture());
+    expect(out).not.toContain("## 한 주 돌아보기");
   });
 });

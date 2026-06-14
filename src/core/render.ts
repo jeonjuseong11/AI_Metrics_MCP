@@ -169,7 +169,7 @@ function hourSparkline(byHour: number[]): string {
 /**
  * 개인 AI 사용 분석 문서를 렌더한다(서술 자료, 평가 아님).
  */
-export function renderAnalysis(a: UsageAnalysis, author?: string): string {
+export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: string): string {
   const who = author ? ` — ${author}` : "";
   const lines: string[] = [];
   lines.push(`# AI 사용 분석${who}`);
@@ -179,6 +179,15 @@ export function renderAnalysis(a: UsageAnalysis, author?: string): string {
   if (a.totals.sessions === 0) {
     lines.push("이 기간에 기록된 AI 세션이 없습니다.");
     return lines.join("\n");
+  }
+
+  // 주간 내러티브(옵션) — 결정적 표보다 앞에 둬 한눈에 읽히게. 표는 아래 남아 대조 검증.
+  if (narrative && narrative.trim() !== "") {
+    lines.push("## 한 주 돌아보기");
+    lines.push(narrative.trim());
+    lines.push("");
+    lines.push("> ⚠️ 결정적 집계를 *서술*한 것이며 새 수치를 만들지 않습니다.");
+    lines.push("");
   }
 
   // 요약.

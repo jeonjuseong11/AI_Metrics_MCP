@@ -13,7 +13,7 @@ import { aggregate } from "./core/metrics.js";
 import { renderMetricsBlock } from "./core/render.js";
 import { buildStandup, buildAnalysis, type StandupOptions, type AnalysisBuildOptions } from "./core/standup.js";
 import { renderAnalysis } from "./core/render.js";
-import { createAnthropicSummarizer } from "./llm/anthropic.js";
+import { createAnthropicSummarizer, createAnthropicNarrator } from "./llm/anthropic.js";
 import { runHook, type HookOptions } from "./core/hook.js";
 
 function usage(): void {
@@ -35,6 +35,8 @@ function usage(): void {
       "    --end YYYY-MM-DD    끝 KST 날짜",
       "    --author <name>     문서 헤더",
       "    --sessions <file>   세션 파일 명시(반복 가능)",
+      "    --llm               주간 사용을 LLM으로 서술. 기본은 드라이(보낼 수치·가림 건수만)",
+      "    --send              실제로 LLM에 전송(ANTHROPIC_API_KEY 필요). --llm과 함께",
       "  aimm hook [옵션]                          초안을 ~/aimm/draft-<date>.md로 생성(SessionEnd hook용)",
       "    --date/--author/--repo  standup과 동일",
       "  aimm mcp                                  MCP stdio 서버 시작(Claude Code가 호출)",
@@ -125,10 +127,31 @@ async function cmdAnalyze(args: string[]): Promise<number> {
   if (flags.sessions && flags.sessions.length > 0) opts.sessionFiles = flags.sessions.filter((s) => s !== "");
   const author = flags.author?.[0];
 
-  const { analysis, warnings } = await buildAnalysis(opts);
-  process.stdout.write(renderAnalysis(analysis, author) + "\n");
+  const useLlm = flags.llm !== undefined;
+  const send = flags.send !== undefined;
+  if (useLlm) {
+    opts.useLlm = true;
+    if (send) opts.summarizer = createAnthropicNarrator();
+    else opts.dryRunLlm = true;
+  }
+
+  const { analysis, warnings, narrative, preview } = await buildAnalysis(opts);
+  process.stdout.write(renderAnalysis(analysis, author, narrative) + "\n");
+
+  if (preview) {
+    process.stderr.write(
+      `\n[dry-run] LLM에 전송될 내용 (${preview.redactions.length}개 비밀 가림):\n` +
+        "─".repeat(50) +
+        "\n" +
+        preview.maskedContext +
+        "\n" +
+        "─".repeat(50) +
+        "\n실제 전송하려면 --send 를 추가하세요(ANTHROPIC_API_KEY 필요).\n",
+    );
+  }
   if (warnings.length > 0) {
-    process.stderr.write(`\n[warnings] ${warnings.length}건\n`);
+    process.stderr.write(`\n[warnings] ${warnings.length}건:\n`);
+    for (const w of warnings) process.stderr.write(`  - ${w}\n`);
   }
   return 0;
 }

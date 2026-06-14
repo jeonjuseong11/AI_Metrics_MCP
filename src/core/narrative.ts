@@ -11,6 +11,7 @@ import { maskSecrets, type Redaction } from "./mask.js";
 import { SummarizerError, type Summarizer } from "../llm/summarizer.js";
 import { shortModelName, prettyProject } from "./render.js";
 import type { UsageAnalysis } from "./analysis.js";
+import type { SituationSummary } from "./situation.js";
 
 function pct(share: number): string {
   return `${Math.round(share * 100)}%`;
@@ -36,7 +37,7 @@ function peakHourPhrase(byHour: number[]): string | null {
 }
 
 /** 결정적 분석 → LLM에 보낼 사실 블록(마스킹 전 원본). 지시문은 내레이터가 감싼다. */
-export function buildNarrativeContext(a: UsageAnalysis): string {
+export function buildNarrativeContext(a: UsageAnalysis, situation?: SituationSummary): string {
   const lines: string[] = [];
   lines.push(`[기간] ${a.range.start} ~ ${a.range.end} (KST)`);
   lines.push(`[총계] 세션 ${a.totals.sessions} · 활동일 ${a.byDay.length} · 비용 약 $${a.totals.costUsd.toFixed(2)}`);
@@ -80,6 +81,11 @@ export function buildNarrativeContext(a: UsageAnalysis): string {
   if (a.busiestDay) {
     lines.push(`[가장 활발] ${a.busiestDay.date} ($${a.busiestDay.costUsd.toFixed(2)})`);
   }
+
+  if (situation && situation.total > 0) {
+    const types = situation.byType.map((t) => `${t.type} ${pct(t.share)}`).join(" · ");
+    lines.push(`[작업성격] ${types} (커밋 ${situation.total}건, repo 기준)`);
+  }
   return lines.join("\n");
 }
 
@@ -90,8 +96,8 @@ export interface PreparedNarrative {
 }
 
 /** 전송 준비: 사실 블록 빌드 + 마스킹(fail-closed). maskSecrets throw 시 전파(전송 차단). */
-export function prepareNarrativeSend(a: UsageAnalysis): PreparedNarrative {
-  const raw = buildNarrativeContext(a);
+export function prepareNarrativeSend(a: UsageAnalysis, situation?: SituationSummary): PreparedNarrative {
+  const raw = buildNarrativeContext(a, situation);
   const { masked, redactions } = maskSecrets(raw);
   return { maskedContext: masked, redactions };
 }
@@ -105,11 +111,15 @@ export interface NarrativeResult {
  * 마스킹된 사실 블록을 내레이터에 보내 주간 산문을 얻는다.
  * 세션 0건/빈 응답은 SummarizerError, 그 외 실패는 그대로 전파 → 호출부 폴백.
  */
-export async function narrateUsage(a: UsageAnalysis, narrator: Summarizer): Promise<NarrativeResult> {
+export async function narrateUsage(
+  a: UsageAnalysis,
+  narrator: Summarizer,
+  situation?: SituationSummary,
+): Promise<NarrativeResult> {
   if (a.totals.sessions === 0) {
     throw new SummarizerError("empty", "서술할 세션이 없습니다.");
   }
-  const { maskedContext, redactions } = prepareNarrativeSend(a);
+  const { maskedContext, redactions } = prepareNarrativeSend(a, situation);
   const prose = await narrator(maskedContext);
   if (typeof prose !== "string" || prose.trim() === "") {
     throw new SummarizerError("empty", "내레이터가 빈 응답을 반환했습니다.");

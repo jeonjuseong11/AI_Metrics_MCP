@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildNarrativeContext, prepareNarrativeSend, narrateUsage } from "../src/core/narrative.js";
 import { buildAnalysis } from "../src/core/standup.js";
+import { kstDayRange } from "../src/core/day.js";
 import { SummarizerError, type Summarizer } from "../src/llm/summarizer.js";
 import type { UsageAnalysis } from "../src/core/analysis.js";
+import type { SituationSummary } from "../src/core/situation.js";
 
 /** 테스트용 최소 UsageAnalysis 픽스처. 필요한 필드만 채우고 나머지는 합리적 기본값. */
 function fixture(over: Partial<UsageAnalysis> = {}): UsageAnalysis {
@@ -125,6 +127,27 @@ describe("narrateUsage", () => {
   });
 });
 
+const sampleSituation: SituationSummary = {
+  total: 5,
+  byType: [
+    { type: "fix", count: 3, share: 0.6 },
+    { type: "feat", count: 2, share: 0.4 },
+  ],
+};
+
+describe("buildNarrativeContext 작업성격", () => {
+  it("situation을 주면 [작업성격] 줄을 추가한다", () => {
+    const ctx = buildNarrativeContext(fixture(), sampleSituation);
+    expect(ctx).toContain("[작업성격]");
+    expect(ctx).toContain("fix 60%");
+    expect(ctx).toContain("커밋 5건");
+  });
+
+  it("situation이 없으면 [작업성격] 줄이 없다", () => {
+    expect(buildNarrativeContext(fixture())).not.toContain("[작업성격]");
+  });
+});
+
 describe("buildAnalysis LLM 분기", () => {
   it("세션이 없으면 useLlm이어도 narrative/preview가 없다", async () => {
     const r = await buildAnalysis({ sessionFiles: [], useLlm: true, dryRunLlm: true });
@@ -173,5 +196,77 @@ describe("buildAnalysis 세션>0 경로", () => {
     const r = await buildAnalysis({ sessionFiles: FIX, useLlm: true, summarizer: boom });
     expect(r.narrative).toBeUndefined();
     expect(r.warnings.some((w) => w.includes("LLM 서술 실패"))).toBe(true);
+  });
+});
+
+describe("buildAnalysis 상황 신호(--repo)", () => {
+  const FIX = ["test/fixtures/one-session.jsonl"];
+  const fakeCommits = [
+    { hash: "a", shortHash: "a", author: "u", timestamp: new Date("2026-06-12T05:00:00Z"), subject: "fix: bug" },
+    { hash: "b", shortHash: "b", author: "u", timestamp: new Date("2026-06-12T06:00:00Z"), subject: "feat: x" },
+  ];
+
+  it("repoPath + commitCollector 주입 시 situation을 채우고 사실블록에 [작업성격]을 넣는다", async () => {
+    const r = await buildAnalysis({
+      sessionFiles: FIX,
+      repoPath: "/x",
+      commitCollector: async () => ({ commits: fakeCommits }),
+      useLlm: true,
+      dryRunLlm: true,
+    });
+    expect(r.situation?.total).toBe(2);
+    expect(r.preview?.maskedContext).toContain("[작업성격]");
+  });
+
+  it("collector가 warning을 내면 situation 없이 warning + 결정적 문서 유지", async () => {
+    const r = await buildAnalysis({
+      sessionFiles: FIX,
+      repoPath: "/x",
+      commitCollector: async () => ({ commits: [], warning: "git 실패" }),
+    });
+    expect(r.situation).toBeUndefined();
+    expect(r.warnings).toContain("git 실패");
+  });
+
+  it("collector가 throw해도 결정적 문서로 폴백 + '상황 신호 수집 실패' warning(불변식 4)", async () => {
+    const r = await buildAnalysis({
+      sessionFiles: FIX,
+      repoPath: "/x",
+      commitCollector: async () => {
+        throw new Error("git boom");
+      },
+    });
+    expect(r.situation).toBeUndefined();
+    expect(r.analysis.totals.sessions).toBeGreaterThan(0); // 결정적 문서는 살아있다
+    expect(r.warnings.some((w) => w.includes("상황 신호 수집 실패"))).toBe(true);
+  });
+
+  it("collector에 세션 분석 창(UTC)과 author를 그대로 넘긴다", async () => {
+    let seen: [string, Date, Date, string | undefined] | undefined;
+    const collector = async (repo: string, s: Date, e: Date, author?: string) => {
+      seen = [repo, s, e, author];
+      return { commits: fakeCommits };
+    };
+    await buildAnalysis({ sessionFiles: FIX, repoPath: "/x", author: "전주성", commitCollector: collector });
+    expect(seen?.[0]).toBe("/x");
+    // 창은 세션 분석 기간(2026-06-12)의 KST 일자 경계를 UTC로 변환한 값과 같아야 한다.
+    expect(seen?.[1].toISOString()).toBe(kstDayRange("2026-06-12").startUtc.toISOString());
+    expect(seen?.[2].toISOString()).toBe(kstDayRange("2026-06-12").endUtc.toISOString());
+    expect(seen?.[3]).toBe("전주성");
+  });
+
+  it("--repo인데 세션이 0이면 작업 성격을 생략하고 사유를 알린다", async () => {
+    let called = false;
+    const r = await buildAnalysis({
+      sessionFiles: [],
+      repoPath: "/x",
+      commitCollector: async () => {
+        called = true;
+        return { commits: fakeCommits };
+      },
+    });
+    expect(called).toBe(false); // 세션 0이면 git 수집조차 안 함(낭비 방지)
+    expect(r.situation).toBeUndefined();
+    expect(r.warnings.some((w) => w.includes("작업 성격을 생략"))).toBe(true);
   });
 });

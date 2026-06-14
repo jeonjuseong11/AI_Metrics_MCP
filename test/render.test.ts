@@ -4,6 +4,7 @@ import { aggregate } from "../src/core/metrics.js";
 import type { Commit } from "../src/parse/git.js";
 import type { NormalizedSession, TokenTotals } from "../src/types.js";
 import type { UsageAnalysis } from "../src/core/analysis.js";
+import type { SituationSummary } from "../src/core/situation.js";
 
 function tk(p: Partial<TokenTotals>): TokenTotals {
   return { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, ...p };
@@ -93,5 +94,26 @@ describe("renderAnalysis 산문 섹션", () => {
   it("narrative가 없으면 산문 섹션을 넣지 않는다", () => {
     const out = renderAnalysis(analysisFixture());
     expect(out).not.toContain("## 한 주 돌아보기");
+  });
+});
+
+const sampleSituation: SituationSummary = {
+  total: 5,
+  byType: [
+    { type: "fix", count: 3, share: 0.6 },
+    { type: "feat", count: 2, share: 0.4 },
+  ],
+};
+
+describe("renderAnalysis 작업 성격 섹션", () => {
+  it("situation을 주면 '작업 성격' 섹션 + 정직성 라벨을 넣는다", () => {
+    const out = renderAnalysis(analysisFixture(), undefined, undefined, sampleSituation);
+    expect(out).toContain("## 작업 성격 (커밋 타입)");
+    expect(out).toContain("fix(수정/디버깅)");
+    expect(out).toContain("시간 추정이지 커밋별 증명이 아닙니다");
+  });
+
+  it("situation이 없으면 '작업 성격' 섹션이 없다", () => {
+    expect(renderAnalysis(analysisFixture())).not.toContain("## 작업 성격");
   });
 });

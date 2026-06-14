@@ -35,6 +35,7 @@ function usage(): void {
       "    --end YYYY-MM-DD    끝 KST 날짜",
       "    --author <name>     문서 헤더",
       "    --sessions <file>   세션 파일 명시(반복 가능)",
+      "    --repo <path>       작업 성격(커밋 타입)을 분류할 저장소 경로",
       "    --llm               주간 사용을 LLM으로 서술. 기본은 드라이(보낼 수치·가림 건수만)",
       "    --send              실제로 LLM에 전송(ANTHROPIC_API_KEY 필요). --llm과 함께",
       "  aimm hook [옵션]                          초안을 ~/aimm/draft-<date>.md로 생성(SessionEnd hook용)",
@@ -125,7 +126,9 @@ async function cmdAnalyze(args: string[]): Promise<number> {
   if (flags.start?.[0]) opts.start = flags.start[0];
   if (flags.end?.[0]) opts.end = flags.end[0];
   if (flags.sessions && flags.sessions.length > 0) opts.sessionFiles = flags.sessions.filter((s) => s !== "");
+  if (flags.repo?.[0]) opts.repoPath = flags.repo[0];
   const author = flags.author?.[0];
+  if (author) opts.author = author;
 
   const useLlm = flags.llm !== undefined;
   const send = flags.send !== undefined;
@@ -135,8 +138,8 @@ async function cmdAnalyze(args: string[]): Promise<number> {
     else opts.dryRunLlm = true;
   }
 
-  const { analysis, warnings, narrative, preview } = await buildAnalysis(opts);
-  process.stdout.write(renderAnalysis(analysis, author, narrative) + "\n");
+  const { analysis, warnings, narrative, preview, situation } = await buildAnalysis(opts);
+  process.stdout.write(renderAnalysis(analysis, author, narrative, situation) + "\n");
 
   if (preview) {
     process.stderr.write(

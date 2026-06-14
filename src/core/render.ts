@@ -9,6 +9,7 @@ import type { AggregatedMetrics, ModelMetric } from "./metrics.js";
 import { PRICING_TABLE_VERSION } from "../pricing.js";
 import type { Commit } from "../parse/git.js";
 import type { UsageAnalysis } from "./analysis.js";
+import { labelCommitType, type SituationSummary } from "./situation.js";
 
 /** 모델 ID → 짧은 표시명. "claude-opus-4-8" → "Opus". */
 export function shortModelName(model: string): string {
@@ -169,7 +170,7 @@ function hourSparkline(byHour: number[]): string {
 /**
  * 개인 AI 사용 분석 문서를 렌더한다(서술 자료, 평가 아님).
  */
-export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: string): string {
+export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: string, situation?: SituationSummary): string {
   const who = author ? ` — ${author}` : "";
   const lines: string[] = [];
   lines.push(`# AI 사용 분석${who}`);
@@ -240,6 +241,19 @@ export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: st
     lines.push(`- ${prettyProject(p.project)} — 세션 ${p.sessions} · $${p.costUsd.toFixed(2)}`);
   }
   lines.push("");
+
+  // 작업 성격(커밋 타입) — situation 있을 때만(--repo). 결정적, 정직성 라벨.
+  if (situation && situation.total > 0) {
+    lines.push("## 작업 성격 (커밋 타입)");
+    for (const t of situation.byType) {
+      lines.push(`- ${labelCommitType(t.type)} ${bar(t.share, 12)} ${pct(t.share)} (${t.count}건)`);
+    }
+    lines.push(
+      `ℹ️ 커밋 ${situation.total}건을 conventional-commit 타입으로 분류(휴리스틱·평가 아님). ` +
+        `AI 사용과의 연결은 같은 기간이라는 시간 추정이지 커밋별 증명이 아닙니다.`,
+    );
+    lines.push("");
+  }
 
   lines.push("---");
   lines.push("⚠️ 이 문서는 *서술*(어떻게 쓰는지)이며 *평가*(잘 쓰는지)가 아닙니다. 토큰·빈도는 양이지 실력이 아닙니다.");

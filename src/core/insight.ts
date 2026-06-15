@@ -11,7 +11,7 @@ import { shortModelName } from "./render.js";
 
 export interface Insight {
   text: string;
-  kind: "cost-concentration" | "model-focus";
+  kind: "cost-concentration" | "model-focus" | "session-cadence" | "weekday-rhythm" | "usage-trend" | "cost-spike";
 }
 
 /** 패밀리(Opus/Sonnet/Haiku)별 토큰 비중 최대. 동률은 이름 코드유닛 비교. */

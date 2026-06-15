@@ -33,6 +33,12 @@ describe("renderPortrait", () => {
     }
   });
 
+  it("발견에 사용 패턴(케이던스)이 등장한다", () => {
+    const out = renderPortrait(fixture());
+    expect(out).toContain("평균 세션");
+    expect(out).toContain("활동일");
+  });
+
   it("막대/스파크라인 문자를 쓰지 않는다", () => {
     expect(renderPortrait(fixture())).not.toContain("█");
   });

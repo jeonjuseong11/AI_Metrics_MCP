@@ -55,3 +55,9 @@ export function sessionsOnKstDay(sessions: NormalizedSession[], kstDate: string)
   const { startUtc, endUtc } = kstDayRange(kstDate);
   return sessions.filter((s) => s.startTime !== undefined && inRange(s.startTime, startUtc, endUtc));
 }
+
+/** 두 KST 날짜("YYYY-MM-DD") 사이 inclusive 일수. start<=end 가정. */
+export function daysBetweenInclusive(start: string, end: string): number {
+  const ms = Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`);
+  return Math.round(ms / 86400000) + 1;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toKstDateString, kstDayRange, yesterdayKst, commitsOnKstDay, sessionsOnKstDay } from "../src/core/day.js";
+import { toKstDateString, kstDayRange, yesterdayKst, commitsOnKstDay, sessionsOnKstDay, daysBetweenInclusive } from "../src/core/day.js";
 import type { Commit } from "../src/parse/git.js";
 import type { NormalizedSession } from "../src/types.js";
 
@@ -40,5 +40,15 @@ describe("KST day boundary", () => {
     ];
     expect(sessionsOnKstDay(sessions, "2026-06-03")).toHaveLength(1);
     expect(sessionsOnKstDay(sessions, "2026-06-02")).toHaveLength(0);
+  });
+});
+
+describe("daysBetweenInclusive", () => {
+  it("같은 날은 1일", () => {
+    expect(daysBetweenInclusive("2026-06-10", "2026-06-10")).toBe(1);
+  });
+  it("inclusive 일수", () => {
+    expect(daysBetweenInclusive("2026-06-01", "2026-06-15")).toBe(15);
+    expect(daysBetweenInclusive("2026-05-11", "2026-06-15")).toBe(36);
   });
 });

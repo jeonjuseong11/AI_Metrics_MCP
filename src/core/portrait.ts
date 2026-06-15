@@ -7,7 +7,8 @@
 
 import type { UsageAnalysis } from "./analysis.js";
 import { shortModelName } from "./render.js";
-import { deriveInsights } from "./insight.js";
+import { deriveFindings } from "./findings.js";
+import { daysBetweenInclusive } from "./day.js";
 
 export interface PortraitOptions {
   author?: string;
@@ -43,8 +44,7 @@ function topModel(a: UsageAnalysis): { name: string; share: number } | undefined
 function periodDays(a: UsageAnalysis): number {
   const { start, end } = a.range;
   if (!start || !end) return a.byDay.length;
-  const ms = Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`);
-  return Math.round(ms / 86400000) + 1;
+  return daysBetweenInclusive(start, end);
 }
 
 const DAY_PARTS: Array<{ from: number; to: number; label: string }> = [
@@ -129,8 +129,8 @@ export function renderPortrait(a: UsageAnalysis, opts: PortraitOptions = {}): st
   lines.push("");
 
   lines.push("## 발견");
-  for (const ins of deriveInsights(a)) lines.push(`- ${ins.text}`);
-  lines.push("> 결정적 관찰. 상관이지 인과·증명이 아니며, 더 깊은 인사이트는 후속(E2).");
+  for (const ins of deriveFindings(a)) lines.push(`- ${ins.text}`);
+  lines.push(`> 결정적 관찰(활동일 ${a.byDay.length}일 기준). 추세·상관 서술이지 통계적 단정·인과가 아닙니다.`);
   lines.push("");
 
   lines.push("## 시간대 패턴");

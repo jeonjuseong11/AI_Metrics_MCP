@@ -4,6 +4,13 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.3.0] — 2026-06-15 · E2 사용 패턴 발견
+
+초상 `## 발견`에 세션 기반 사용 패턴(케이던스·요일 리듬·사용 추세·비용 급증일) 추가.
+결정적·작은 n 가드. git 상관(생산성)은 후속 단계로. 테스트 109 → 123 그린.
+
+→ 상세: [docs/releases/2026-06-15-v0.3.0-e2-usage-patterns.md](docs/releases/2026-06-15-v0.3.0-e2-usage-patterns.md)
+
 ## [0.2.0] — 2026-06-15 · E1 AI craft 초상
 
 `aimm portrait` 명령 추가 — 공유용 AI craft 초상(텍스트+표만, 5필드, 결정적 미니 인사이트).

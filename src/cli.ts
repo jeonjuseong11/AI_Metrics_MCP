@@ -13,6 +13,8 @@ import { aggregate } from "./core/metrics.js";
 import { renderMetricsBlock } from "./core/render.js";
 import { buildStandup, buildAnalysis, type StandupOptions, type AnalysisBuildOptions } from "./core/standup.js";
 import { renderAnalysis } from "./core/render.js";
+import { renderPortrait, type PortraitOptions } from "./core/portrait.js";
+import { toKstDateString } from "./core/day.js";
 import { createAnthropicSummarizer, createAnthropicNarrator } from "./llm/anthropic.js";
 import { runHook, type HookOptions } from "./core/hook.js";
 
@@ -38,6 +40,11 @@ function usage(): void {
       "    --repo <path>       작업 성격(커밋 타입)을 분류할 저장소 경로",
       "    --llm               주간 사용을 LLM으로 서술. 기본은 드라이(보낼 수치·가림 건수만)",
       "    --send              실제로 LLM에 전송(ANTHROPIC_API_KEY 필요). --llm과 함께",
+      "  aimm portrait [옵션]                      공유용 AI craft 초상(텍스트+표) 생성",
+      "    --start YYYY-MM-DD  시작 KST 날짜(기본: 데이터 전체)",
+      "    --end YYYY-MM-DD    끝 KST 날짜",
+      "    --author <name>     문서 헤더",
+      "    --sessions <file>   세션 파일 명시(반복 가능)",
       "  aimm hook [옵션]                          초안을 ~/aimm/draft-<date>.md로 생성(SessionEnd hook용)",
       "    --date/--author/--repo  standup과 동일",
       "  aimm mcp                                  MCP stdio 서버 시작(Claude Code가 호출)",
@@ -159,6 +166,25 @@ async function cmdAnalyze(args: string[]): Promise<number> {
   return 0;
 }
 
+async function cmdPortrait(args: string[]): Promise<number> {
+  const flags = parseFlags(args);
+  const opts: AnalysisBuildOptions = {};
+  if (flags.start?.[0]) opts.start = flags.start[0];
+  if (flags.end?.[0]) opts.end = flags.end[0];
+  if (flags.sessions && flags.sessions.length > 0) opts.sessionFiles = flags.sessions.filter((s) => s !== "");
+  const author = flags.author?.[0];
+
+  const { analysis, warnings } = await buildAnalysis(opts);
+  const portraitOpts: PortraitOptions = { generatedDate: toKstDateString(new Date()) };
+  if (author) portraitOpts.author = author;
+  process.stdout.write(renderPortrait(analysis, portraitOpts) + "\n");
+  if (warnings.length > 0) {
+    process.stderr.write(`\n[warnings] ${warnings.length}건:\n`);
+    for (const w of warnings) process.stderr.write(`  - ${w}\n`);
+  }
+  return 0;
+}
+
 async function cmdMetrics(files: string[]): Promise<number> {
   if (files.length === 0) {
     process.stderr.write("metrics: JSONL 파일 경로가 필요합니다.\n");
@@ -185,6 +211,8 @@ async function main(): Promise<number> {
       return cmdStandup(rest);
     case "analyze":
       return cmdAnalyze(rest);
+    case "portrait":
+      return cmdPortrait(rest);
     case "hook":
       return cmdHook(rest);
     case "mcp":

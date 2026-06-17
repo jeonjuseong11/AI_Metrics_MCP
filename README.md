@@ -268,6 +268,22 @@ Phase 3(설치형 프로그램으로 PC 전체 LLM 사용 분석 — 무엇을·
 **후속(PoC 범위 밖):** 멀티-AI 메트릭(Cursor·ChatGPT·Gemini), 경영 대시보드,
 구독 의사결정용 사용·비용 통계(옵트인 익명 집계).
 
+## 어떻게 만들었나 — AI 페어링
+
+이 저장소는 **Claude Code를 페어로 써서** 만들었다. 구현 타이핑·초안은 AI가,
+**아키텍처·스코프·트레이드오프 결정은 내가** 했다. 그 과정 자체를 증거로 남긴다:
+
+- **전략/스코프** — [CEO 플랜](docs/superpowers/aimm-ceo-plan.md):
+  적대적 리뷰 1라운드를 거친 스코프 결정표(E1~E7)와 영구 제외선(경영진 감시 모드).
+- **기능별 설계** — [docs/superpowers/specs/](docs/superpowers/specs/):
+  각 기능의 목적·정체성·트레이드오프. 예) E2를 "git 상관"이 아니라
+  "내가 어떻게 쓰는지"로 재구성한 판단.
+- **구현 계획** — [docs/superpowers/plans/](docs/superpowers/plans/):
+  brainstorm → spec → plan → 구현 사이클의 task 단위 분해.
+
+설계 결정의 예 — 모두 위 문서에 근거가 있다: 메트릭은 LLM을 우회해 결정적으로
+계산(환각 차단), 마스킹은 fail-closed, "세션 지속(추정)"처럼 한계를 정직하게 표기.
+
 ## 개발
 
 ```bash

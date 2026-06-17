@@ -1,7 +1,7 @@
 # 릴리스 노트 작성 규칙
 
 각 EXPANSION 항목(E1~)을 spec→plan→구현으로 끝내지 않고 **"무엇이 어떻게 바뀌었나"의
-증거로 닫는다.** 설계: [../superpowers/specs/2026-06-15-release-tracking-design.md](../superpowers/specs/2026-06-15-release-tracking-design.md).
+증거로 닫는다.** 설계: [../superpowers/specs/release-tracking-design.md](../superpowers/specs/release-tracking-design.md).
 
 ## 규칙
 - **단위:** E당 릴리스 1개. **버전:** E당 minor bump(E1→0.2.0, E2→0.3.0…). `package.json` version 동반 상승.

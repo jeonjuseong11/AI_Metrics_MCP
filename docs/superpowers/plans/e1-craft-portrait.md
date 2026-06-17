@@ -489,7 +489,7 @@ git commit -m "feat: aimm portrait command (shareable craft portrait)"
 ## Task 4: v0.2.0 릴리스 (릴리스 기록 규칙 적용)
 
 **Files:**
-- Create: `docs/releases/2026-06-15-v0.2.0-e1-craft-portrait.md`
+- Create: `docs/releases/v0.2.0-e1-craft-portrait.md`
 - Modify: `CHANGELOG.md`, `package.json`
 
 - [ ] **Step 1: 증거 수집** — 릴리스 노트에 박을 값을 캡처한다(어긋나면 Step 2 본문 교체).
@@ -507,7 +507,7 @@ Run (검증 수치):
 npx vitest run 2>&1 | grep -E "Tests|Test Files" && npx tsc --noEmit && echo "tsc OK"
 ```
 
-- [ ] **Step 2: 릴리스 노트 작성** — `docs/releases/2026-06-15-v0.2.0-e1-craft-portrait.md`를 작성(Step 1 실측 반영):
+- [ ] **Step 2: 릴리스 노트 작성** — `docs/releases/v0.2.0-e1-craft-portrait.md`를 작성(Step 1 실측 반영):
 
 ````markdown
 # v0.2.0 — E1 AI craft 초상
@@ -550,7 +550,7 @@ _(선택 — 비워둠)_
 `aimm portrait` 명령 추가 — 공유용 AI craft 초상(텍스트+표만, 5필드, 결정적 미니 인사이트).
 프로젝트명 비노출. 기존 분석 코어 재사용.
 
-→ 상세: [docs/releases/2026-06-15-v0.2.0-e1-craft-portrait.md](docs/releases/2026-06-15-v0.2.0-e1-craft-portrait.md)
+→ 상세: [docs/releases/v0.2.0-e1-craft-portrait.md](docs/releases/v0.2.0-e1-craft-portrait.md)
 
 ````
 
@@ -560,8 +560,8 @@ _(선택 — 비워둠)_
 
 Run:
 ```bash
-test -f docs/releases/2026-06-15-v0.2.0-e1-craft-portrait.md && echo "EXISTS"
-grep -Eq "turbo-pra|checkin-be|seoultel|supertonic|kiosk|bbibbi|arreo|mcmp|AIWS|std-new" docs/releases/2026-06-15-v0.2.0-e1-craft-portrait.md && echo "❌ 누출" || echo "✅ 누출 없음"
+test -f docs/releases/v0.2.0-e1-craft-portrait.md && echo "EXISTS"
+grep -Eq "turbo-pra|checkin-be|seoultel|supertonic|kiosk|bbibbi|arreo|mcmp|AIWS|std-new" docs/releases/v0.2.0-e1-craft-portrait.md && echo "❌ 누출" || echo "✅ 누출 없음"
 grep '"version": "0.2.0"' package.json && echo "✅ 버전 0.2.0"
 ```
 Expected: `EXISTS` · `✅ 누출 없음` · `✅ 버전 0.2.0`.
@@ -569,7 +569,7 @@ Expected: `EXISTS` · `✅ 누출 없음` · `✅ 버전 0.2.0`.
 - [ ] **Step 6: Commit (사용자가 실행)**
 
 ```bash
-git add docs/releases/2026-06-15-v0.2.0-e1-craft-portrait.md CHANGELOG.md package.json
+git add docs/releases/v0.2.0-e1-craft-portrait.md CHANGELOG.md package.json
 git commit -m "docs: v0.2.0 release note (E1 craft portrait) + version bump"
 ```
 

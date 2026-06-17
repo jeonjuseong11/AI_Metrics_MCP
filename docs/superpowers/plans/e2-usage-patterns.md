@@ -496,7 +496,7 @@ git commit -m "feat: portrait 발견 uses composed findings (E1+E2)"
 ## Task 5: v0.3.0 릴리스 (규칙 적용)
 
 **Files:**
-- Create: `docs/releases/2026-06-15-v0.3.0-e2-usage-patterns.md`
+- Create: `docs/releases/v0.3.0-e2-usage-patterns.md`
 - Modify: `CHANGELOG.md`, `package.json`
 
 - [ ] **Step 1: 증거 수집**
@@ -514,7 +514,7 @@ Run (검증):
 npx vitest run 2>&1 | grep -E "Test Files|Tests " && npx tsc --noEmit && echo "tsc OK"
 ```
 
-- [ ] **Step 2: 릴리스 노트 작성** — `docs/releases/2026-06-15-v0.3.0-e2-usage-patterns.md` (Step 1 실측 반영):
+- [ ] **Step 2: 릴리스 노트 작성** — `docs/releases/v0.3.0-e2-usage-patterns.md` (Step 1 실측 반영):
 
 ````markdown
 # v0.3.0 — E2 사용 패턴 발견 엔진
@@ -555,7 +555,7 @@ _(선택 — 비워둠)_
 초상 `## 발견`에 세션 기반 사용 패턴(케이던스·요일 리듬·사용 추세·비용 급증일) 추가.
 결정적·작은 n 가드. git 상관(생산성)은 후속 단계로.
 
-→ 상세: [docs/releases/2026-06-15-v0.3.0-e2-usage-patterns.md](docs/releases/2026-06-15-v0.3.0-e2-usage-patterns.md)
+→ 상세: [docs/releases/v0.3.0-e2-usage-patterns.md](docs/releases/v0.3.0-e2-usage-patterns.md)
 
 ````
 
@@ -564,8 +564,8 @@ _(선택 — 비워둠)_
 - [ ] **Step 5: 검증**
 
 ```bash
-test -f docs/releases/2026-06-15-v0.3.0-e2-usage-patterns.md && echo "EXISTS"
-grep -Eq "turbo-pra|checkin-be|seoultel|supertonic|kiosk|bbibbi|arreo|mcmp|AIWS|std-new" docs/releases/2026-06-15-v0.3.0-e2-usage-patterns.md && echo "❌ 누출" || echo "✅ 누출 없음"
+test -f docs/releases/v0.3.0-e2-usage-patterns.md && echo "EXISTS"
+grep -Eq "turbo-pra|checkin-be|seoultel|supertonic|kiosk|bbibbi|arreo|mcmp|AIWS|std-new" docs/releases/v0.3.0-e2-usage-patterns.md && echo "❌ 누출" || echo "✅ 누출 없음"
 grep -q '"version": "0.3.0"' package.json && echo "✅ 0.3.0"
 ```
 Expected: `EXISTS` · `✅ 누출 없음` · `✅ 0.3.0`.
@@ -573,7 +573,7 @@ Expected: `EXISTS` · `✅ 누출 없음` · `✅ 0.3.0`.
 - [ ] **Step 6: Commit (사용자가 실행)**
 
 ```bash
-git add docs/releases/2026-06-15-v0.3.0-e2-usage-patterns.md CHANGELOG.md package.json
+git add docs/releases/v0.3.0-e2-usage-patterns.md CHANGELOG.md package.json
 git commit -m "docs: v0.3.0 release note (E2 usage patterns) + version bump"
 ```
 

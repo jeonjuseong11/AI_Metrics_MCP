@@ -43,6 +43,12 @@ describe("renderPortrait", () => {
     expect(renderPortrait(fixture())).not.toContain("█");
   });
 
+  it("도구별 사용 표의 다중도구 안내는 E4를 가리킨다(E3/E5 stale 문구 아님)", () => {
+    const out = renderPortrait(fixture());
+    expect(out).toContain("후속 단계(E4)");
+    expect(out).not.toContain("E3/E5");
+  });
+
   it("프로젝트명을 노출하지 않고 개수만 보여준다", () => {
     const out = renderPortrait(fixture());
     expect(out).not.toContain("turbo-pra");

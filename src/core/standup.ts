@@ -20,8 +20,8 @@ import { prepareNarrativeSend, narrateUsage } from "./narrative.js";
 import { summarizeSituation, type SituationSummary } from "./situation.js";
 import type { Redaction } from "./mask.js";
 import { collectCommits } from "../fs/git.js";
-import { discoverSessionFiles } from "../fs/discover.js";
-import { readSessionFiles } from "../fs/sessions.js";
+import { claudeCodeAdapter } from "../adapters/claudeCode.js";
+import type { CollectOptions, SourceAdapter } from "../adapters/types.js";
 import type { Commit } from "../parse/git.js";
 import type { Summarizer } from "../llm/summarizer.js";
 import type { ParseWarning } from "../types.js";
@@ -35,6 +35,8 @@ export interface StandupOptions {
   /** 명시 세션 파일. 없으면 projectsDir에서 발견. */
   sessionFiles?: string[];
   projectsDir?: string;
+  /** AI 사용 소스 어댑터. 기본 claudeCodeAdapter. 테스트·멀티소스 확장용 주입점. */
+  adapter?: SourceAdapter;
   /** 테스트용 고정 시각. */
   now?: Date;
   /** 주어지고 useLlm=true면 "어제 한 일"을 LLM으로 요약(실패 시 커밋 목록 폴백). */
@@ -58,8 +60,13 @@ export async function buildStandup(opts: StandupOptions = {}): Promise<StandupRe
   const warnings: string[] = [];
 
   // 1. 세션 수집 → KST 일자 필터 → 메트릭.
-  const files = opts.sessionFiles ?? (await discoverSessionFiles(opts.projectsDir));
-  const parsed = await readSessionFiles(files);
+  const adapter = opts.adapter ?? claudeCodeAdapter;
+  // sessionFiles:[](빈 배열, truthy)는 paths=[]로 보존돼 자동 발견을 건너뛴다(기존 `??` 동작과 동일 — .length 가드로 바꾸지 말 것).
+  // projectsDir:""(falsy)는 rootDir 미설정 → 어댑터 기본 디렉터리로 정규화. undefined 직접 대입 금지(exactOptionalPropertyTypes).
+  const collectOpts: CollectOptions = {};
+  if (opts.sessionFiles) collectOpts.paths = opts.sessionFiles;
+  if (opts.projectsDir) collectOpts.rootDir = opts.projectsDir;
+  const parsed = await adapter.collect(collectOpts);
   for (const w of parsed.warnings) warnings.push(formatParseWarning(w));
   const daySessions = sessionsOnKstDay(parsed.sessions, date);
   const metrics = aggregate(daySessions);
@@ -115,6 +122,8 @@ export interface AnalysisBuildOptions {
   end?: string;
   sessionFiles?: string[];
   projectsDir?: string;
+  /** AI 사용 소스 어댑터. 기본 claudeCodeAdapter. 테스트·멀티소스 확장용 주입점. */
+  adapter?: SourceAdapter;
   /** 주어지고 useLlm=true면 주간 사용을 LLM으로 서술(실패 시 결정적 문서로 폴백). */
   summarizer?: Summarizer;
   useLlm?: boolean;
@@ -142,8 +151,13 @@ export interface AnalysisBuildResult {
 /** 개인 사용 분석을 빌드(세션 발견·수집 → analyze). CLI/MCP 공유 코어. */
 export async function buildAnalysis(opts: AnalysisBuildOptions = {}): Promise<AnalysisBuildResult> {
   const warnings: string[] = [];
-  const files = opts.sessionFiles ?? (await discoverSessionFiles(opts.projectsDir));
-  const parsed = await readSessionFiles(files);
+  const adapter = opts.adapter ?? claudeCodeAdapter;
+  // sessionFiles:[](빈 배열, truthy)는 paths=[]로 보존돼 자동 발견을 건너뛴다(기존 `??` 동작과 동일 — .length 가드로 바꾸지 말 것).
+  // projectsDir:""(falsy)는 rootDir 미설정 → 어댑터 기본 디렉터리로 정규화. undefined 직접 대입 금지(exactOptionalPropertyTypes).
+  const collectOpts: CollectOptions = {};
+  if (opts.sessionFiles) collectOpts.paths = opts.sessionFiles;
+  if (opts.projectsDir) collectOpts.rootDir = opts.projectsDir;
+  const parsed = await adapter.collect(collectOpts);
   for (const w of parsed.warnings) warnings.push(formatParseWarning(w));
 
   const analyzeOpts: AnalyzeOptions = {};

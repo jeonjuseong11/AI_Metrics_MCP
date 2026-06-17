@@ -114,7 +114,7 @@ export function renderPortrait(a: UsageAnalysis, opts: PortraitOptions = {}): st
   lines.push("| 도구 | 세션 |");
   lines.push("|------|------|");
   lines.push(`| Claude Code | ${a.totals.sessions} |`);
-  lines.push("_다중 도구(Cursor 등)는 후속 단계(E3/E5)에서 추가됩니다._");
+  lines.push("_다중 도구(Cursor 등)는 후속 단계(E4)에서 추가됩니다._");
   lines.push("");
 
   lines.push("## 비용 요약");

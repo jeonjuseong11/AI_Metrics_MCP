@@ -11,7 +11,7 @@
 import { readSessionFiles } from "./fs/sessions.js";
 import { aggregate } from "./core/metrics.js";
 import { renderMetricsBlock } from "./core/render.js";
-import { buildStandup, buildAnalysis, type StandupOptions, type AnalysisBuildOptions } from "./core/standup.js";
+import { buildStandup, buildAnalysis, ANALYSIS_ADAPTERS, type StandupOptions, type AnalysisBuildOptions } from "./core/standup.js";
 import { renderAnalysis } from "./core/render.js";
 import { renderPortrait, type PortraitOptions } from "./core/portrait.js";
 import { toKstDateString } from "./core/day.js";
@@ -145,6 +145,7 @@ async function cmdAnalyze(args: string[]): Promise<number> {
     else opts.dryRunLlm = true;
   }
 
+  opts.adapters = ANALYSIS_ADAPTERS; // analyze는 멀티소스(Claude Code + Cursor)
   const { analysis, warnings, narrative, preview, situation } = await buildAnalysis(opts);
   process.stdout.write(renderAnalysis(analysis, author, narrative, situation) + "\n");
 
@@ -174,6 +175,7 @@ async function cmdPortrait(args: string[]): Promise<number> {
   if (flags.sessions && flags.sessions.length > 0) opts.sessionFiles = flags.sessions.filter((s) => s !== "");
   const author = flags.author?.[0];
 
+  opts.adapters = ANALYSIS_ADAPTERS; // portrait도 멀티소스(Claude Code + Cursor)
   const { analysis, warnings } = await buildAnalysis(opts);
   const portraitOpts: PortraitOptions = { generatedDate: toKstDateString(new Date()) };
   if (author) portraitOpts.author = author;

@@ -40,6 +40,8 @@ export interface NormalizedMessage {
 /** 한 Claude Code 세션(JSONL 파일 1개)을 정규화한 결과. */
 export interface NormalizedSession {
   sessionId: string;
+  /** 이 세션을 만든 소스 어댑터 id. 예: "claude-code", "cursor". 오케스트레이터가 스탬프. 미지정 시 집계에서 "(unknown)". */
+  source?: string;
   /** 세션이 속한 프로젝트 경로(역슬러그). 없으면 undefined. */
   projectPath: string | undefined;
   messages: NormalizedMessage[];

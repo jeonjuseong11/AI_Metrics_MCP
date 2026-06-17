@@ -37,17 +37,32 @@ export interface ProjectBucket {
   costUsd: number;
 }
 
+/** 소스(도구)별 사용 집계. cost-unknown 소스(Cursor 등)는 비용을 "미상"으로 둔다. */
+export interface ToolBucket {
+  source: string;
+  displayName: string;
+  sessions: number;
+  costUsd: number;
+  /** providesCost. false면 렌더가 비용을 "미상"으로 표기. */
+  costKnown: boolean;
+}
+
+/** source id → 표시명·비용제공여부. buildAnalysis가 어댑터 목록에서 구성해 analyze에 주입. */
+export type SourceMeta = Map<string, { displayName: string; providesCost: boolean }>;
+
 export interface UsageAnalysis {
   range: { start: string; end: string };
   totals: { sessions: number; tokens: TokenTotals; costUsd: number; durationMs: number };
   byModel: ModelShare[];
   byDay: DayBucket[];
-  /** KST 0~23시 세션 시작 분포(길이 24). */
+  /** KST 0~23시 세션 시작 분포(길이 24). cost-known 소스만. */
   byHourKst: number[];
   byProject: ProjectBucket[];
   busiestDay: DayBucket | undefined;
   hasUnknownModel: boolean;
   pricingVersion: string;
+  /** 소스(도구)별 집계. 단일 소스면 길이 1. 옵셔널(기존 픽스처 호환; analyze는 항상 채움). */
+  byTool?: ToolBucket[];
 }
 
 function displayTokensOf(t: TokenTotals): number {
@@ -71,8 +86,18 @@ export interface AnalyzeOptions {
   end?: string;
 }
 
-/** 세션 목록 → 사용 분석. 순수·결정적. */
-export function analyze(sessions: NormalizedSession[], opts: AnalyzeOptions = {}): UsageAnalysis {
+/**
+ * 세션 목록 → 사용 분석. 순수·결정적.
+ *
+ * `sourceMeta`(소스 id → 비용제공여부)가 주어지면, **cost-unknown 소스(Cursor 등)는 모델/비용/시간 롤업에서
+ * 제외**하고 byTool에만 반영한다. 이로써 Cursor의 0토큰·"unknown" 모델이 hasUnknownModel을 켜거나
+ * 모델믹스·프로젝트에 유령 행을 만드는 오염을 차단한다. 미주입(빈 맵)이면 모든 소스가 cost-known(기존 동작).
+ */
+export function analyze(
+  sessions: NormalizedSession[],
+  opts: AnalyzeOptions = {},
+  sourceMeta: SourceMeta = new Map(),
+): UsageAnalysis {
   // 시작 시각 있는 세션만, 시작 시각의 KST 날짜로 귀속.
   const dated = sessions
     .filter((s): s is NormalizedSession & { startTime: Date } => s.startTime !== undefined)
@@ -88,8 +113,15 @@ export function analyze(sessions: NormalizedSession[], opts: AnalyzeOptions = {}
   const rangeStart = opts.start ?? dates[0] ?? "";
   const rangeEnd = opts.end ?? dates[dates.length - 1] ?? "";
 
-  const rangeSessions = inRange.map((d) => d.session);
-  const overall = aggregate(rangeSessions);
+  // cost-known 판정: 맵에 없으면 true(기존 단일 소스 동작 보존).
+  const isCostKnown = (s: NormalizedSession): boolean => sourceMeta.get(s.source ?? "")?.providesCost ?? true;
+
+  // 기존 롤업(모델·일자·시간대·프로젝트·총계·hasUnknownModel)은 cost-known 세션만.
+  const inRangeKnown = inRange.filter((d) => isCostKnown(d.session));
+  const knownSessions = inRangeKnown.map((d) => d.session);
+  const allSessions = inRange.map((d) => d.session); // byTool·range용(전 소스)
+
+  const overall = aggregate(knownSessions);
   const totalDisplay = metricsDisplayTokens(overall);
 
   // 모델 비중.
@@ -104,9 +136,9 @@ export function analyze(sessions: NormalizedSession[], opts: AnalyzeOptions = {}
     };
   });
 
-  // 일자별.
+  // 일자별(cost-known).
   const dayMap = new Map<string, NormalizedSession[]>();
-  for (const { session, kstDate } of inRange) {
+  for (const { session, kstDate } of inRangeKnown) {
     groupPush(dayMap, kstDate, session);
   }
   const byDay: DayBucket[] = [...dayMap.keys()].sort().map((date) => {
@@ -119,9 +151,9 @@ export function analyze(sessions: NormalizedSession[], opts: AnalyzeOptions = {}
     };
   });
 
-  // 프로젝트별.
+  // 프로젝트별(cost-known).
   const projMap = new Map<string, NormalizedSession[]>();
-  for (const session of rangeSessions) {
+  for (const session of knownSessions) {
     groupPush(projMap, session.projectPath ?? "(unknown)", session);
   }
   const byProject: ProjectBucket[] = [...projMap.keys()]
@@ -136,9 +168,9 @@ export function analyze(sessions: NormalizedSession[], opts: AnalyzeOptions = {}
     })
     .sort((a, b) => b.costUsd - a.costUsd || b.displayTokens - a.displayTokens);
 
-  // 시간대(KST) 분포.
+  // 시간대(KST) 분포(cost-known).
   const byHourKst = new Array<number>(24).fill(0);
-  for (const { session } of inRange) {
+  for (const { session } of inRangeKnown) {
     const kstHour = new Date(session.startTime.getTime() + 9 * 60 * 60 * 1000).getUTCHours();
     byHourKst[kstHour] = (byHourKst[kstHour] ?? 0) + 1;
   }
@@ -155,6 +187,25 @@ export function analyze(sessions: NormalizedSession[], opts: AnalyzeOptions = {}
     }
   }
 
+  // 도구별(전 소스). cost-unknown 소스는 비용 미상.
+  const toolMap = new Map<string, NormalizedSession[]>();
+  for (const session of allSessions) {
+    groupPush(toolMap, session.source ?? "(unknown)", session);
+  }
+  const byTool: ToolBucket[] = [...toolMap.entries()]
+    .map(([source, group]) => {
+      const meta = sourceMeta.get(source);
+      const costKnown = meta?.providesCost ?? true;
+      return {
+        source,
+        displayName: meta?.displayName ?? source,
+        sessions: group.length,
+        costUsd: costKnown ? aggregate(group).totalCostUsd : 0,
+        costKnown,
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions || (a.source < b.source ? -1 : a.source > b.source ? 1 : 0));
+
   return {
     range: { start: rangeStart, end: rangeEnd },
     totals: {
@@ -170,5 +221,6 @@ export function analyze(sessions: NormalizedSession[], opts: AnalyzeOptions = {}
     busiestDay,
     hasUnknownModel: overall.hasUnknownModel,
     pricingVersion: PRICING_TABLE_VERSION,
+    byTool,
   };
 }

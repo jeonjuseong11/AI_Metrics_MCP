@@ -178,7 +178,20 @@ export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: st
   lines.push("");
 
   if (a.totals.sessions === 0) {
-    lines.push("이 기간에 기록된 AI 세션이 없습니다.");
+    const toolTotal = (a.byTool ?? []).reduce((n, t) => n + t.sessions, 0);
+    if (toolTotal === 0) {
+      lines.push("이 기간에 기록된 AI 세션이 없습니다.");
+      return lines.join("\n");
+    }
+    // 비용-측정 가능 소스(Claude Code)는 없지만 비용-미상 소스(Cursor 등) 활동은 있음
+    // → "세션 없음" 거짓 메시지 대신 도구별만 정직하게(honest snapshot).
+    lines.push("비용·토큰을 측정할 수 있는 소스(Claude Code) 기록이 이 기간에 없습니다. 아래는 시간·빈도만 잡히는 소스입니다.");
+    lines.push("");
+    lines.push("## 도구별 사용");
+    for (const t of a.byTool ?? []) {
+      lines.push(`- ${t.displayName}: 세션 ${t.sessions} · ${t.costKnown ? `약 $${t.costUsd.toFixed(2)}` : "비용 미상"}`);
+    }
+    lines.push("_세션 정의는 도구마다 다릅니다: Claude Code=세션 로그, Cursor=대화(composer)._");
     return lines.join("\n");
   }
 
@@ -241,6 +254,17 @@ export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: st
     lines.push(`- ${prettyProject(p.project)} — 세션 ${p.sessions} · $${p.costUsd.toFixed(2)}`);
   }
   lines.push("");
+
+  // 도구별 사용(멀티소스). 단일 도구면 생략. cost-unknown 소스(Cursor)는 "비용 미상".
+  const tools = a.byTool ?? [];
+  if (tools.length > 1) {
+    lines.push("## 도구별 사용");
+    for (const t of tools) {
+      lines.push(`- ${t.displayName}: 세션 ${t.sessions} · ${t.costKnown ? `약 $${t.costUsd.toFixed(2)}` : "비용 미상"}`);
+    }
+    lines.push("_세션 정의는 도구마다 다릅니다: Claude Code=세션 로그, Cursor=대화(composer)._");
+    lines.push("");
+  }
 
   // 작업 성격(커밋 타입) — situation 있을 때만(--repo). 결정적, 정직성 라벨.
   if (situation && situation.total > 0) {

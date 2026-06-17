@@ -12,7 +12,7 @@
  */
 
 import { aggregate } from "./metrics.js";
-import { analyze, type AnalyzeOptions, type UsageAnalysis } from "./analysis.js";
+import { analyze, type AnalyzeOptions, type SourceMeta, type UsageAnalysis } from "./analysis.js";
 import { commitsOnKstDay, kstDayRange, sessionsOnKstDay, yesterdayKst } from "./day.js";
 import { renderDraft, type DraftOptions } from "./render.js";
 import { prepareSend, summarizeAccomplishments } from "./summarize.js";
@@ -21,10 +21,14 @@ import { summarizeSituation, type SituationSummary } from "./situation.js";
 import type { Redaction } from "./mask.js";
 import { collectCommits } from "../fs/git.js";
 import { claudeCodeAdapter } from "../adapters/claudeCode.js";
+import { cursorAdapter } from "../adapters/cursor.js";
 import type { CollectOptions, SourceAdapter } from "../adapters/types.js";
 import type { Commit } from "../parse/git.js";
 import type { Summarizer } from "../llm/summarizer.js";
-import type { ParseWarning } from "../types.js";
+import type { NormalizedSession, ParseResult, ParseWarning } from "../types.js";
+
+/** analyze/portrait의 production 멀티소스 어댑터. cli·mcp analyze가 명시 주입(코어 기본은 claude-only). */
+export const ANALYSIS_ADAPTERS: SourceAdapter[] = [claudeCodeAdapter, cursorAdapter];
 
 export interface StandupOptions {
   /** KST 날짜 "YYYY-MM-DD". 없으면 now 기준 어제. */
@@ -35,8 +39,8 @@ export interface StandupOptions {
   /** 명시 세션 파일. 없으면 projectsDir에서 발견. */
   sessionFiles?: string[];
   projectsDir?: string;
-  /** AI 사용 소스 어댑터. 기본 claudeCodeAdapter. 테스트·멀티소스 확장용 주입점. */
-  adapter?: SourceAdapter;
+  /** AI 사용 소스 어댑터 목록. 기본 [claudeCodeAdapter](claude-only). cli/mcp analyze가 ANALYSIS_ADAPTERS 주입. */
+  adapters?: SourceAdapter[];
   /** 테스트용 고정 시각. */
   now?: Date;
   /** 주어지고 useLlm=true면 "어제 한 일"을 LLM으로 요약(실패 시 커밋 목록 폴백). */
@@ -60,13 +64,30 @@ export async function buildStandup(opts: StandupOptions = {}): Promise<StandupRe
   const warnings: string[] = [];
 
   // 1. 세션 수집 → KST 일자 필터 → 메트릭.
-  const adapter = opts.adapter ?? claudeCodeAdapter;
-  // sessionFiles:[](빈 배열, truthy)는 paths=[]로 보존돼 자동 발견을 건너뛴다(기존 `??` 동작과 동일 — .length 가드로 바꾸지 말 것).
-  // projectsDir:""(falsy)는 rootDir 미설정 → 어댑터 기본 디렉터리로 정규화. undefined 직접 대입 금지(exactOptionalPropertyTypes).
+  const adapters = opts.adapters ?? [claudeCodeAdapter];
+  // 기본은 claude-only(코어 결정성·테스트 footgun 방지). 멀티소스는 cli/mcp analyze가 ANALYSIS_ADAPTERS를 명시 주입.
+  // sessionFiles:[](빈 배열, truthy)는 paths=[]로 보존돼 자동 발견을 건너뛴다 — .length 가드로 바꾸지 말 것.
   const collectOpts: CollectOptions = {};
   if (opts.sessionFiles) collectOpts.paths = opts.sessionFiles;
   if (opts.projectsDir) collectOpts.rootDir = opts.projectsDir;
-  const parsed = await adapter.collect(collectOpts);
+  const collected = await Promise.all(
+    adapters.map(async (a) => {
+      try {
+        // 레거시 sessionFiles/projectsDir는 Claude Code 전용 — 타 소스엔 자기 기본 발견을 쓴다.
+        const r = await a.collect(a.id === claudeCodeAdapter.id ? collectOpts : {});
+        return { sessions: r.sessions.map((s) => ({ ...s, source: a.id })), warnings: r.warnings };
+      } catch (e) {
+        return {
+          sessions: [] as NormalizedSession[],
+          warnings: [{ line: 0, reason: `${a.id} 수집 실패: ${(e as Error).message}` }] as ParseWarning[],
+        };
+      }
+    }),
+  );
+  const parsed: ParseResult = {
+    sessions: collected.flatMap((c) => c.sessions),
+    warnings: collected.flatMap((c) => c.warnings),
+  };
   for (const w of parsed.warnings) warnings.push(formatParseWarning(w));
   const daySessions = sessionsOnKstDay(parsed.sessions, date);
   const metrics = aggregate(daySessions);
@@ -122,8 +143,8 @@ export interface AnalysisBuildOptions {
   end?: string;
   sessionFiles?: string[];
   projectsDir?: string;
-  /** AI 사용 소스 어댑터. 기본 claudeCodeAdapter. 테스트·멀티소스 확장용 주입점. */
-  adapter?: SourceAdapter;
+  /** AI 사용 소스 어댑터 목록. 기본 [claudeCodeAdapter](claude-only). cli/mcp analyze가 ANALYSIS_ADAPTERS 주입. */
+  adapters?: SourceAdapter[];
   /** 주어지고 useLlm=true면 주간 사용을 LLM으로 서술(실패 시 결정적 문서로 폴백). */
   summarizer?: Summarizer;
   useLlm?: boolean;
@@ -151,19 +172,42 @@ export interface AnalysisBuildResult {
 /** 개인 사용 분석을 빌드(세션 발견·수집 → analyze). CLI/MCP 공유 코어. */
 export async function buildAnalysis(opts: AnalysisBuildOptions = {}): Promise<AnalysisBuildResult> {
   const warnings: string[] = [];
-  const adapter = opts.adapter ?? claudeCodeAdapter;
-  // sessionFiles:[](빈 배열, truthy)는 paths=[]로 보존돼 자동 발견을 건너뛴다(기존 `??` 동작과 동일 — .length 가드로 바꾸지 말 것).
-  // projectsDir:""(falsy)는 rootDir 미설정 → 어댑터 기본 디렉터리로 정규화. undefined 직접 대입 금지(exactOptionalPropertyTypes).
+  const adapters = opts.adapters ?? [claudeCodeAdapter];
+  // 기본은 claude-only(코어 결정성·테스트 footgun 방지). 멀티소스는 cli/mcp analyze가 ANALYSIS_ADAPTERS를 명시 주입.
+  // sessionFiles:[](빈 배열, truthy)는 paths=[]로 보존돼 자동 발견을 건너뛴다 — .length 가드로 바꾸지 말 것.
   const collectOpts: CollectOptions = {};
   if (opts.sessionFiles) collectOpts.paths = opts.sessionFiles;
   if (opts.projectsDir) collectOpts.rootDir = opts.projectsDir;
-  const parsed = await adapter.collect(collectOpts);
+  const collected = await Promise.all(
+    adapters.map(async (a) => {
+      try {
+        // 레거시 sessionFiles/projectsDir는 Claude Code 전용 — 타 소스엔 자기 기본 발견을 쓴다.
+        const r = await a.collect(a.id === claudeCodeAdapter.id ? collectOpts : {});
+        return { sessions: r.sessions.map((s) => ({ ...s, source: a.id })), warnings: r.warnings };
+      } catch (e) {
+        return {
+          sessions: [] as NormalizedSession[],
+          warnings: [{ line: 0, reason: `${a.id} 수집 실패: ${(e as Error).message}` }] as ParseWarning[],
+        };
+      }
+    }),
+  );
+  const parsed: ParseResult = {
+    sessions: collected.flatMap((c) => c.sessions),
+    warnings: collected.flatMap((c) => c.warnings),
+  };
   for (const w of parsed.warnings) warnings.push(formatParseWarning(w));
 
   const analyzeOpts: AnalyzeOptions = {};
   if (opts.start) analyzeOpts.start = opts.start;
   if (opts.end) analyzeOpts.end = opts.end;
-  const analysis = analyze(parsed.sessions, analyzeOpts);
+  const sourceMeta: SourceMeta = new Map(
+    adapters.map((a): [string, { displayName: string; providesCost: boolean }] => [
+      a.id,
+      { displayName: a.displayName, providesCost: a.providesCost },
+    ]),
+  );
+  const analysis = analyze(parsed.sessions, analyzeOpts, sourceMeta);
 
   const result: AnalysisBuildResult = { analysis, warnings };
 

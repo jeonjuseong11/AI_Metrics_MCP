@@ -11,7 +11,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { buildStandup, buildAnalysis } from "../core/standup.js";
+import { buildStandup, buildAnalysis, ANALYSIS_ADAPTERS } from "../core/standup.js";
 import { renderAnalysis } from "../core/render.js";
 
 const KST_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD(KST)");
@@ -49,6 +49,7 @@ export function createMcpServer(): McpServer {
       const opts: Parameters<typeof buildAnalysis>[0] = {};
       if (args.start) opts.start = args.start;
       if (args.end) opts.end = args.end;
+      opts.adapters = ANALYSIS_ADAPTERS; // analyze 도구는 멀티소스(Claude Code + Cursor)
       const { analysis } = await buildAnalysis(opts);
       return { content: [{ type: "text", text: renderAnalysis(analysis, args.author) }] };
     },

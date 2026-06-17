@@ -86,7 +86,24 @@ export function renderPortrait(a: UsageAnalysis, opts: PortraitOptions = {}): st
   lines.push("");
 
   if (a.totals.sessions === 0) {
-    lines.push("이 기간에 기록된 AI 세션이 없습니다.");
+    const toolTotal = (a.byTool ?? []).reduce((n, t) => n + t.sessions, 0);
+    if (toolTotal === 0) {
+      lines.push("이 기간에 기록된 AI 세션이 없습니다.");
+      lines.push("");
+      lines.push("---");
+      lines.push("⚠️ *서술*이며 *평가* 아님. 로컬 생성·본인 소유.");
+      return lines.join("\n");
+    }
+    // 비용-미상 소스(Cursor 등)만 활동 — "세션 없음" 거짓 대신 도구별 표를 보여준다(honest snapshot).
+    lines.push("비용·토큰을 측정할 수 있는 소스(Claude Code) 기록이 이 기간에 없습니다. 아래는 시간·빈도만 잡히는 소스입니다.");
+    lines.push("");
+    lines.push("## 도구별 사용");
+    lines.push("| 도구 | 세션 | 추정 비용 |");
+    lines.push("|------|------|-----------|");
+    for (const t of a.byTool ?? []) {
+      lines.push(`| ${t.displayName} | ${t.sessions} | ${t.costKnown ? `약 ${formatMoney(t.costUsd)}` : "미상"} |`);
+    }
+    lines.push("_세션 정의는 도구마다 다릅니다: Claude Code=세션 로그, Cursor=대화(composer)._");
     lines.push("");
     lines.push("---");
     lines.push("⚠️ *서술*이며 *평가* 아님. 로컬 생성·본인 소유.");
@@ -111,10 +128,20 @@ export function renderPortrait(a: UsageAnalysis, opts: PortraitOptions = {}): st
   lines.push("");
 
   lines.push("## 도구별 사용");
-  lines.push("| 도구 | 세션 |");
-  lines.push("|------|------|");
-  lines.push(`| Claude Code | ${a.totals.sessions} |`);
-  lines.push("_다중 도구(Cursor 등)는 후속 단계(E4)에서 추가됩니다._");
+  lines.push("| 도구 | 세션 | 추정 비용 |");
+  lines.push("|------|------|-----------|");
+  // analyze는 production에서 항상 byTool을 채운다. 이 fallback은 byTool 없는 손수 픽스처·back-compat 전용
+  // (이 분기에 닿을 땐 sessions>0이고 cost-known 단일 소스 = Claude Code 가정).
+  const tools =
+    a.byTool && a.byTool.length > 0
+      ? a.byTool
+      : [{ source: "claude-code", displayName: "Claude Code", sessions: a.totals.sessions, costUsd: a.totals.costUsd, costKnown: true }];
+  for (const t of tools) {
+    lines.push(`| ${t.displayName} | ${t.sessions} | ${t.costKnown ? `약 ${formatMoney(t.costUsd)}` : "미상"} |`);
+  }
+  if (tools.length > 1) {
+    lines.push("_세션 정의는 도구마다 다릅니다: Claude Code=세션 로그, Cursor=대화(composer)._");
+  }
   lines.push("");
 
   lines.push("## 비용 요약");

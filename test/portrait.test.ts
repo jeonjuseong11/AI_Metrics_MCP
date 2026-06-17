@@ -43,10 +43,26 @@ describe("renderPortrait", () => {
     expect(renderPortrait(fixture())).not.toContain("█");
   });
 
-  it("도구별 사용 표의 다중도구 안내는 E4를 가리킨다(E3/E5 stale 문구 아님)", () => {
+  it("도구별 사용 표: byTool 없으면 Claude Code 단일 행(fallback), stale E4/E5 문구 없음", () => {
     const out = renderPortrait(fixture());
-    expect(out).toContain("후속 단계(E4)");
+    expect(out).toContain("## 도구별 사용");
+    expect(out).toContain("| Claude Code |");
+    expect(out).not.toContain("후속 단계");
     expect(out).not.toContain("E3/E5");
+  });
+
+  it("도구별 사용 표: byTool에 Cursor가 있으면 미상 행 + 세션정의 캐비엇", () => {
+    const out = renderPortrait(
+      fixture({
+        byTool: [
+          { source: "claude-code", displayName: "Claude Code", sessions: 23, costUsd: 3434.04, costKnown: true },
+          { source: "cursor", displayName: "Cursor", sessions: 12, costUsd: 0, costKnown: false },
+        ],
+      }),
+    );
+    expect(out).toContain("| Cursor | 12 | 미상 |");
+    expect(out).toContain("| Claude Code | 23 | 약 "); // cost-known 행도 money 렌더
+    expect(out).toContain("세션 정의는 도구마다");
   });
 
   it("프로젝트명을 노출하지 않고 개수만 보여준다", () => {

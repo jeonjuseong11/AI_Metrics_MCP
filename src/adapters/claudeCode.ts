@@ -15,6 +15,7 @@ import type { CollectOptions, SourceAdapter } from "./types.js";
 export const claudeCodeAdapter: SourceAdapter = {
   id: "claude-code",
   displayName: "Claude Code",
+  providesCost: true,
   // 인터페이스는 opts?(선택), 구현은 opts = {}(기본값) — 기본값 있는 필수 매개변수는 선택 계약을 구조적으로 만족(의도된 형태).
   async collect(opts: CollectOptions = {}): Promise<ParseResult> {
     const files = opts.paths ?? (await discoverSessionFiles(opts.rootDir));

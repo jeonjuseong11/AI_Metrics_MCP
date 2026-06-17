@@ -4,6 +4,14 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.5.0] — 2026-06-17 · E5 Cursor 어댑터 + 멀티소스 통합
+
+Cursor를 두 번째 소스로 추가 — analyze/portrait "도구별 사용" 표에 Cursor 행(비용 미상). `node:sqlite`로
+`state.vscdb` 읽기(스파이크: 토큰 불완전·모델 미상 → 시간·빈도만). `providesCost` 능력 모델 + source 태깅 +
+cost-unknown 격리(Claude Code 출력 무오염). standup/hook은 claude-only 유지. 테스트 133 → 146 그린.
+
+→ 상세: [docs/releases/v0.5.0-cursor-multisource.md](docs/releases/v0.5.0-cursor-multisource.md)
+
 ## [0.4.0] — 2026-06-17 · E3 멀티소스 어댑터 인터페이스
 
 AI 사용 소스를 `SourceAdapter` 계약(`id`·`displayName`·`collect`) 뒤로 격리. 오케스트레이터가

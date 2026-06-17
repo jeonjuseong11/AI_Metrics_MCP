@@ -113,11 +113,11 @@ describe("오케스트레이터 DI seam (E3 핵심)", () => {
   it("buildAnalysis가 주입 어댑터에만 의존 — 디스크 발견 호출 없이 분석 산출", async () => {
     const sessions = injectedSessions();
     const collect = vi.fn(async (): Promise<ParseResult> => ({ sessions, warnings: [] }));
-    const fake: SourceAdapter = { id: "fake", displayName: "Fake", collect };
+    const fake: SourceAdapter = { id: "fake", displayName: "Fake", providesCost: true, collect };
     const discoverSpy = vi.spyOn(discover, "discoverSessionFiles");
 
     // sessionFiles/projectsDir 미지정 → 구버전이면 실 ~/.claude를 스캔했을 경로.
-    const r = await buildAnalysis({ adapter: fake });
+    const r = await buildAnalysis({ adapters: [fake] });
 
     expect(collect).toHaveBeenCalledTimes(1);
     expect(discoverSpy).not.toHaveBeenCalled(); // 오케스트레이터가 실 발견 경로를 전혀 안 탐
@@ -129,10 +129,10 @@ describe("오케스트레이터 DI seam (E3 핵심)", () => {
   it("buildStandup도 주입 어댑터 1회 호출 + 주입 데이터가 초안에 흐른다", async () => {
     const sessions = injectedSessions();
     const collect = vi.fn(async (): Promise<ParseResult> => ({ sessions, warnings: [] }));
-    const fake: SourceAdapter = { id: "fake", displayName: "Fake", collect };
+    const fake: SourceAdapter = { id: "fake", displayName: "Fake", providesCost: true, collect };
     const discoverSpy = vi.spyOn(discover, "discoverSessionFiles");
 
-    const r = await buildStandup({ adapter: fake, date: "2026-06-12" });
+    const r = await buildStandup({ adapters: [fake], date: "2026-06-12" });
 
     expect(collect).toHaveBeenCalledTimes(1);
     expect(discoverSpy).not.toHaveBeenCalled();

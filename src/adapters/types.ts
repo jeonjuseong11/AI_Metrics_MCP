@@ -25,6 +25,8 @@ export interface SourceAdapter {
   readonly id: string;
   /** 사람용 표시 이름. 예: "Claude Code". */
   readonly displayName: string;
+  /** 토큰/비용을 신뢰 가능하게 제공하는가. false면 분석이 비용을 "미상"으로 표기하고 모델/비용 집계에서 제외. */
+  readonly providesCost: boolean;
   /** 발견 + 읽기 + 파싱 → 정규화 세션. */
   collect(opts?: CollectOptions): Promise<ParseResult>;
 }

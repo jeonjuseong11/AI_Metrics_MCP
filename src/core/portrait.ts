@@ -164,6 +164,20 @@ export function renderPortrait(a: UsageAnalysis, opts: PortraitOptions = {}): st
   lines.push(`주로 **${peakWindow(a.byHourKst)}**에 사용합니다 (세션 시작 KST 최빈 구간).`);
   lines.push("");
 
+  // 무엇에 썼나 — 추상 라벨만(경로·프로젝트명·카운트·기타-예시 비노출). 공유 안전.
+  const cs = a.contentSummary;
+  if (cs && cs.sessionsWithContent > 0 && cs.activity.length > 0) {
+    const top = cs.activity.slice(0, 3).map((x) => x.category);
+    const first = top[0]!;
+    const rest = top.slice(1);
+    const acts = rest.length > 0 ? `주로 **${first}**(${rest.join("·")})` : `주로 **${first}**`;
+    const topAreas = cs.areas.slice(0, 3).map((x) => x.area).join("·");
+    lines.push("## 무엇에 썼나");
+    lines.push(`${acts}${topAreas ? `. ${topAreas} 영역에 사용` : ""}.`);
+    lines.push("> tool_use 빈도 기반 *서술*이지 평가가 아닙니다.");
+    lines.push("");
+  }
+
   lines.push("## 본인 메모");
   lines.push("_(이 줄을 지우고, 이 기간 자랑할 작업·맥락을 직접 적으세요.)_");
   lines.push("");

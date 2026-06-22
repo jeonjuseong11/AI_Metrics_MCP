@@ -9,6 +9,9 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+/** 이 모듈(dist/core/init.js)의 URL. cmdInit이 runInit에 넘겨 형제 dist/cli.js를 해석한다. */
+export const INIT_MODULE_URL = import.meta.url;
+
 /** SessionEnd hook 커맨드가 aimm 것인가 — 절대경로 아닌 안정 마커(cli.js … hook)로 판정. */
 const HOOK_MARKER = /(?:^|[\\/])cli\.js["']?\s+hook(?:\s|$)/;
 export function isAimmHook(command: string): boolean {

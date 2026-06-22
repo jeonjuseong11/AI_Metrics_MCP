@@ -10,6 +10,7 @@ import { PRICING_TABLE_VERSION } from "../pricing.js";
 import type { Commit } from "../parse/git.js";
 import type { UsageAnalysis } from "./analysis.js";
 import { labelCommitType, type SituationSummary } from "./situation.js";
+import { OTHER } from "./content.js";
 
 /** 모델 ID → 짧은 표시명. "claude-opus-4-8" → "Opus". */
 export function shortModelName(model: string): string {
@@ -146,6 +147,11 @@ function pct(share: number): string {
   return `${(share * 100).toFixed(0)}%`;
 }
 
+/** 정수 천단위 콤마(결정적 — toLocaleString 비사용). 1800 → "1,800". */
+function commaInt(n: number): string {
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 /** 프로젝트 슬러그를 읽기 쉽게: "...GitHub-AIWS-Front" → "AIWS-Front". */
 export function prettyProject(slug: string): string {
   const marker = "GitHub-";
@@ -263,6 +269,27 @@ export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: st
       lines.push(`- ${t.displayName}: 세션 ${t.sessions} · ${t.costKnown ? `약 $${t.costUsd.toFixed(2)}` : "비용 미상"}`);
     }
     lines.push("_세션 정의는 도구마다 다릅니다: Claude Code=세션 로그, Cursor=대화(composer)._");
+    lines.push("");
+  }
+
+  // 무엇을 했나(세션 내용) — 결정적, content 있을 때만(Claude Code).
+  const cs = a.contentSummary;
+  if (cs && cs.sessionsWithContent > 0) {
+    lines.push("## 무엇을 했나 (세션 내용 기반)");
+    const act = cs.activity.map((x) => `${x.category} ${pct(x.share)}`).join(" · ");
+    if (act) lines.push(`- 활동: ${act}   (도구 호출 ${commaInt(cs.totalToolUses)}건 기준)`);
+    const TOP_AREAS = 6;
+    const shownAreas = cs.areas.slice(0, TOP_AREAS);
+    const extraAreas = cs.areas.length - shownAreas.length;
+    const areaStr = shownAreas.map((x) => `${x.area} ${x.count}`).join(" · ");
+    if (areaStr) lines.push(`- 다룬 영역: ${areaStr}${extraAreas > 0 ? ` · 외 ${extraAreas}개` : ""}`);
+    const cmdStr = cs.commands
+      .map((c) => (c.category === OTHER ? `기타 ${c.count}` : `${c.category}(${c.exampleVerbs.join("·")} ${c.count})`))
+      .join(" · ");
+    if (cmdStr) lines.push(`- 명령: ${cmdStr}`);
+    lines.push(`- 대화 깊이: 사용자 요청 ~${cs.userPrompts}건 · 내용 분석된 세션 ${cs.sessionsWithContent}건`);
+    lines.push("ℹ️ tool_use 빈도 기반 휴리스틱(무엇을 했나의 근사). Claude Code 세션만 분석(타 소스 내용 미파악).");
+    lines.push("   메인 세션의 서브에이전트 디스패치만 셈 — 서브에이전트 내부 작업은 제외(무거우면 총량 과소).");
     lines.push("");
   }
 

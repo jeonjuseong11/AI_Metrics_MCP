@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSessionContent } from "../src/parse/claudeCode.js";
+import { OTHER } from "../src/core/content.js";
 
 /** 실측 구조(2026-06-10)를 본뜬 정상 assistant 라인 1개. */
 function assistantLine(opts: {
@@ -91,5 +92,85 @@ describe("parseSessionContent", () => {
     expect(session.messages).toHaveLength(0);
     expect(warnings).toHaveLength(0);
     expect(session.startTime).toBeUndefined();
+  });
+});
+
+describe("parseSessionContent — 내용 다이제스트", () => {
+  const userStr = (ts: string, text: string) =>
+    JSON.stringify({ timestamp: ts, message: { role: "user", content: text } });
+  const userToolResult = (ts: string) =>
+    JSON.stringify({ timestamp: ts, message: { role: "user", content: [{ type: "tool_result", content: "ok" }] } });
+  const assistantTools = (ts: string, items: unknown[], usage = true) => {
+    const message: Record<string, unknown> = { role: "assistant", model: "claude-opus-4-8", content: items };
+    if (usage) message.usage = { input_tokens: 10, output_tokens: 5 };
+    return JSON.stringify({ timestamp: ts, message });
+  };
+
+  it("tool_use·file_path·command·user 프롬프트를 닫힌 어휘로 추출한다", () => {
+    const content = [
+      userStr("2026-06-02T10:00:00.000Z", "구현해줘"),
+      assistantTools("2026-06-02T10:01:00.000Z", [
+        { type: "text", text: "ok" },
+        { type: "tool_use", name: "Edit", input: { file_path: "/home/x/src/a.ts" } },
+        { type: "tool_use", name: "Bash", input: { command: "cd /repo && git status" } },
+        { type: "tool_use", name: "Bash", input: { command: "./secret/deploy.sh" } },
+      ]),
+      userToolResult("2026-06-02T10:02:00.000Z"),
+    ].join("\n");
+    const { session } = parseSessionContent(content, "s1");
+    expect(session.content).toBeDefined();
+    const c = session.content!;
+    expect(c.userPrompts).toBe(1); // tool_result 턴은 제외
+    expect(c.toolUses).toEqual({ Edit: 1, Bash: 2 });
+    expect(c.fileExts).toEqual({ ".ts": 1 });
+    expect(c.commandVerbs).toEqual({ git: 1, [OTHER]: 1 }); // cd 스킵→git; ./secret/deploy.sh→기타(원시 미저장)
+    expect(JSON.stringify(c)).not.toContain("/home");
+    expect(JSON.stringify(c)).not.toContain("deploy.sh");
+  });
+
+  it("usage 없는 assistant의 tool_use도 카운트한다(메트릭과 독립)", () => {
+    const content = assistantTools(
+      "2026-06-02T10:00:00.000Z",
+      [{ type: "tool_use", name: "Read", input: { file_path: "x.md" } }],
+      false,
+    );
+    const { session } = parseSessionContent(content, "s1");
+    expect(session.messages).toHaveLength(0); // usage 없으니 메트릭 0(불변)
+    expect(session.content?.toolUses).toEqual({ Read: 1 });
+    expect(session.content?.fileExts).toEqual({ ".md": 1 });
+  });
+
+  it("내용 신호가 전혀 없으면 content를 생략한다(usage-only 라인)", () => {
+    const content = assistantLine({ ts: "2026-06-02T10:00:00.000Z" });
+    const { session } = parseSessionContent(content, "s1");
+    expect(session.content).toBeUndefined();
+    expect(session.messages).toHaveLength(1); // 메트릭 불변
+  });
+
+  it("file_path/command 외 input 필드(path·pattern·url)는 다이제스트에 안 들어간다(누출 방지 회귀)", () => {
+    const content = assistantTools("2026-06-02T10:00:00.000Z", [
+      { type: "tool_use", name: "Grep", input: { pattern: "/secret/leak", path: "/home/u/private" } },
+      { type: "tool_use", name: "WebFetch", input: { url: "https://example.com/token.txt" } },
+    ]);
+    const { session } = parseSessionContent(content, "s1");
+    const c = session.content!;
+    expect(c.toolUses).toEqual({ Grep: 1, WebFetch: 1 }); // 도구명만(닫힌 어휘)
+    expect(c.fileExts).toEqual({}); // path/pattern은 읽지 않음 — .txt는 url이지 file_path 아님
+    expect(c.commandVerbs).toEqual({});
+    const s = JSON.stringify(c);
+    expect(s).not.toContain("/secret");
+    expect(s).not.toContain("example.com");
+    expect(s).not.toMatch(/[/\\]/);
+  });
+
+  it("기존 user 'hi' 라인은 userPrompts:1을 기여하되 메트릭은 불변", () => {
+    const content = [
+      JSON.stringify({ timestamp: "2026-06-02T10:00:00.000Z", message: { role: "user", content: "hi" } }),
+      assistantLine({ ts: "2026-06-02T10:02:00.000Z" }),
+    ].join("\n");
+    const { session, warnings } = parseSessionContent(content, "s1");
+    expect(session.messages).toHaveLength(1);
+    expect(warnings).toHaveLength(0);
+    expect(session.content?.userPrompts).toBe(1);
   });
 });

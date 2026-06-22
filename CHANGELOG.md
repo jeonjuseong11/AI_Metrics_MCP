@@ -4,6 +4,16 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.6.0] — 2026-06-22 · 세션 내용 요약 + 클린 설치/aimm init
+
+파서가 버리던 `message.content`(tool_use·사용자 프롬프트)를 결정적 **닫힌-어휘 다이제스트**로 추출 → analyze/portrait/주간
+내러티브에 "무엇을 했나"(활동·영역·명령·대화 깊이). 원시 경로·명령·텍스트는 분류 후 폐기(프라이버시 구성상 보장),
+cost-known(Claude Code) 세션만 롤업(내용-미파악 격리). 더불어 `prepare` 빌드훅으로 클론 후 `npm install`만으로 동작
+(MCP 설치 버그 해소) + `aimm init` 원커맨드 셋업(센티넬 멱등·백업·.mcp.json 폴백). 적대 spec 리뷰 blocker 5 반영.
+테스트 146 → 178 그린.
+
+→ 상세: [docs/releases/v0.6.0-session-content-summary.md](docs/releases/v0.6.0-session-content-summary.md)
+
 ## [0.5.0] — 2026-06-17 · E5 Cursor 어댑터 + 멀티소스 통합
 
 Cursor를 두 번째 소스로 추가 — analyze/portrait "도구별 사용" 표에 Cursor 행(비용 미상). `node:sqlite`로

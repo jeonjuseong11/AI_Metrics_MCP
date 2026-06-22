@@ -23,8 +23,10 @@ import type {
   NormalizedSession,
   ParseWarning,
   RawUsage,
+  SessionContentDigest,
   TokenTotals,
 } from "../types.js";
+import { isKnownExt, isKnownVerb, OTHER } from "../core/content.js";
 
 /** 숫자로 강제하되 비정상이면 null(호출부가 라인 skip 판단). */
 function toFiniteNumber(v: unknown): number | null {
@@ -51,6 +53,79 @@ function parseTimestamp(v: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// ── 내용 다이제스트 추출(role/usage 가드와 독립; 닫힌 어휘만 저장) ──────────────
+
+const NAV_SKIP = new Set(["cd", "pushd", "popd", "set", "export", "sudo", "env"]);
+
+function isObj(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+/** 명령에서 첫 의미 토큰(내비 노이즈 스킵). 원시 토큰 반환 — 호출부가 닫힌 어휘로 분류. */
+function firstMeaningfulVerb(command: string): string | null {
+  for (const seg of command.split(/&&|;/)) {
+    const tok = seg.trim().split(/\s+/)[0];
+    if (!tok || NAV_SKIP.has(tok)) continue;
+    return tok;
+  }
+  return null;
+}
+
+function emptyDigest(): SessionContentDigest {
+  return { userPrompts: 0, toolUses: {}, fileExts: {}, commandVerbs: {} };
+}
+
+function digestHasSignal(d: SessionContentDigest): boolean {
+  return (
+    d.userPrompts > 0 ||
+    Object.keys(d.toolUses).length > 0 ||
+    Object.keys(d.fileExts).length > 0 ||
+    Object.keys(d.commandVerbs).length > 0
+  );
+}
+
+/** message 1건의 내용을 digest에 누적(닫힌 어휘만 저장). role/usage 가드와 독립. */
+function accumulateContent(d: SessionContentDigest, msg: Record<string, unknown>): void {
+  const role = msg.role;
+  const content = msg.content;
+
+  if (role === "user") {
+    if (typeof content === "string") {
+      if (content.trim() !== "") d.userPrompts += 1;
+    } else if (Array.isArray(content)) {
+      if (content.some((it) => isObj(it) && it.type === "text")) d.userPrompts += 1;
+    }
+    return;
+  }
+
+  if (role === "assistant" && Array.isArray(content)) {
+    for (const it of content) {
+      if (!isObj(it) || it.type !== "tool_use") continue;
+      const name = typeof it.name === "string" ? it.name : null;
+      if (!name) continue;
+      d.toolUses[name] = (d.toolUses[name] ?? 0) + 1;
+      const input = it.input;
+      if (!isObj(input)) continue;
+      const fp = input.file_path ?? input.notebook_path;
+      if (typeof fp === "string") {
+        const m = /\.[A-Za-z0-9]{1,12}$/.exec(fp);
+        if (m) {
+          const ext = m[0].toLowerCase();
+          const key = isKnownExt(ext) ? ext : OTHER;
+          d.fileExts[key] = (d.fileExts[key] ?? 0) + 1;
+        }
+      }
+      if ((name === "Bash" || name === "PowerShell") && typeof input.command === "string") {
+        const verb = firstMeaningfulVerb(input.command);
+        if (verb) {
+          const key = isKnownVerb(verb) ? verb : OTHER;
+          d.commandVerbs[key] = (d.commandVerbs[key] ?? 0) + 1;
+        }
+      }
+    }
+  }
+}
+
 /**
  * JSONL 문자열 1개(= 세션 1개)를 정규화. 순수 함수 — 테스트 용이.
  */
@@ -61,6 +136,7 @@ export function parseSessionContent(
 ): { session: NormalizedSession; warnings: ParseWarning[] } {
   const warnings: ParseWarning[] = [];
   const messages: NormalizedMessage[] = [];
+  const digest = emptyDigest();
 
   const lines = content.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
@@ -81,8 +157,12 @@ export function parseSessionContent(
     const message = rec.message;
     if (typeof message !== "object" || message === null) continue;
     const msg = message as Record<string, unknown>;
+
+    // 내용 추출 — role/usage 가드 '위'에서(user 프롬프트·usage 없는 tool_use 포착).
+    accumulateContent(digest, msg);
+
     if (msg.role !== "assistant") continue;
-    if (msg.usage === undefined) continue; // assistant지만 usage 없음 = 정상 무시
+    if (msg.usage === undefined) continue; // assistant지만 usage 없음 = 정상 무시(메트릭만)
 
     const tokens = extractTokens(msg.usage);
     if (tokens === null) {
@@ -104,8 +184,8 @@ export function parseSessionContent(
   const startTime = times.length ? new Date(Math.min(...times)) : undefined;
   const endTime = times.length ? new Date(Math.max(...times)) : undefined;
 
-  return {
-    session: { sessionId, projectPath, messages, startTime, endTime },
-    warnings,
-  };
+  const session: NormalizedSession = { sessionId, projectPath, messages, startTime, endTime };
+  if (digestHasSignal(digest)) session.content = digest;
+
+  return { session, warnings };
 }

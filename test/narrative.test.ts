@@ -5,6 +5,7 @@ import { kstDayRange } from "../src/core/day.js";
 import { SummarizerError, type Summarizer } from "../src/llm/summarizer.js";
 import type { UsageAnalysis } from "../src/core/analysis.js";
 import type { SituationSummary } from "../src/core/situation.js";
+import { OTHER } from "../src/core/content.js";
 
 /** 테스트용 최소 UsageAnalysis 픽스처. 필요한 필드만 채우고 나머지는 합리적 기본값. */
 function fixture(over: Partial<UsageAnalysis> = {}): UsageAnalysis {
@@ -145,6 +146,44 @@ describe("buildNarrativeContext 작업성격", () => {
 
   it("situation이 없으면 [작업성격] 줄이 없다", () => {
     expect(buildNarrativeContext(fixture())).not.toContain("[작업성격]");
+  });
+});
+
+describe("buildNarrativeContext 작업내용", () => {
+  function withContent() {
+    return fixture({
+      contentSummary: {
+        sessionsWithContent: 8,
+        userPrompts: 278,
+        totalToolUses: 1000,
+        activity: [
+          { category: "구현", count: 490, share: 0.49 },
+          { category: "탐색", count: 280, share: 0.28 },
+          { category: "실행·검증", count: 230, share: 0.23 },
+        ],
+        areas: [
+          { area: "TypeScript", count: 5 },
+          { area: "Java", count: 3 },
+        ],
+        commands: [
+          { category: "패키지", count: 5, exampleVerbs: ["npm"] },
+          { category: OTHER, count: 2, exampleVerbs: [] },
+        ],
+      },
+    });
+  }
+
+  it("content 있으면 [작업내용] 줄을 카테고리·정수로만 넣는다", () => {
+    const ctx = buildNarrativeContext(withContent());
+    expect(ctx).toContain("[작업내용]");
+    expect(ctx).toContain("구현49%");
+    expect(ctx).toContain("요청 278건");
+    const line = ctx.split("\n").find((l) => l.startsWith("[작업내용]"))!;
+    expect(line).not.toMatch(/[/\\]/); // 경로·원시토큰 없음
+  });
+
+  it("content 없으면 [작업내용] 줄이 없다", () => {
+    expect(buildNarrativeContext(fixture())).not.toContain("[작업내용]");
   });
 });
 

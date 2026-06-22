@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { analyze } from "../src/core/analysis.js";
-import type { NormalizedSession, TokenTotals } from "../src/types.js";
+import type { NormalizedSession, SessionContentDigest, TokenTotals } from "../src/types.js";
 
 function tk(p: Partial<TokenTotals>): TokenTotals {
   return { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, ...p };
@@ -78,5 +78,55 @@ describe("analyze", () => {
     );
     expect(a.totals.sessions).toBe(1);
     expect(a.byDay.map((d) => d.date)).toEqual(["2026-06-08"]);
+  });
+});
+
+describe("analyze — contentSummary", () => {
+  const meta = new Map([
+    ["claude-code", { displayName: "Claude Code", providesCost: true }],
+    ["cursor", { displayName: "Cursor", providesCost: false }],
+  ]);
+
+  function withContent(source: string, content: SessionContentDigest, start = "2026-06-10T01:00:00Z"): NormalizedSession {
+    const startDate = new Date(start);
+    return {
+      sessionId: source + "-x",
+      source,
+      projectPath: "p",
+      content,
+      messages: source === "cursor" ? [] : [{ model: "claude-opus-4-8", timestamp: startDate, tokens: tk({ input: 1, output: 1 }) }],
+      startTime: startDate,
+      endTime: startDate,
+    };
+  }
+
+  it("cost-known 세션의 digest를 contentSummary로 롤업한다", () => {
+    const a = analyze(
+      [withContent("claude-code", { userPrompts: 3, toolUses: { Edit: 5 }, fileExts: { ".ts": 5 }, commandVerbs: {} })],
+      {},
+      meta,
+    );
+    expect(a.contentSummary?.sessionsWithContent).toBe(1);
+    expect(a.contentSummary?.userPrompts).toBe(3);
+    expect(a.contentSummary?.activity[0]?.category).toBe("구현");
+  });
+
+  it("cost-unknown 세션에 합성 content가 있어도 내용 롤업에서 제외한다(격리 회귀)", () => {
+    const a = analyze(
+      [
+        withContent("claude-code", { userPrompts: 1, toolUses: { Edit: 1 }, fileExts: {}, commandVerbs: {} }),
+        withContent("cursor", { userPrompts: 99, toolUses: { Bash: 99 }, fileExts: {}, commandVerbs: {} }),
+      ],
+      {},
+      meta,
+    );
+    expect(a.contentSummary?.sessionsWithContent).toBe(1); // cursor 제외
+    expect(a.contentSummary?.userPrompts).toBe(1);
+    expect(a.contentSummary?.activity.find((x) => x.category === "실행·검증")).toBeUndefined();
+  });
+
+  it("content 있는 세션이 없으면 contentSummary는 undefined", () => {
+    const a = analyze([sess({ id: "1", startIso: "2026-06-10T01:00:00Z", model: "claude-opus-4-8", tokens: tk({ input: 10 }) })], {}, meta);
+    expect(a.contentSummary).toBeUndefined();
   });
 });

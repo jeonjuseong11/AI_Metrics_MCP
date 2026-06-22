@@ -96,3 +96,40 @@ describe("renderPortrait", () => {
     expect(out).not.toContain("## 도구별 사용");
   });
 });
+
+describe("renderPortrait 무엇에 썼나", () => {
+  function withContent() {
+    return fixture({
+      contentSummary: {
+        sessionsWithContent: 8,
+        userPrompts: 278,
+        totalToolUses: 1800,
+        activity: [
+          { category: "구현", count: 880, share: 0.49 },
+          { category: "탐색", count: 500, share: 0.28 },
+          { category: "실행·검증", count: 420, share: 0.23 },
+        ],
+        areas: [
+          { area: "TypeScript", count: 508 },
+          { area: "Java", count: 187 },
+          { area: "문서", count: 240 },
+        ],
+        commands: [],
+      },
+    });
+  }
+
+  it("활동·영역을 추상 라벨로만 넣는다(경로·카운트 없음)", () => {
+    const out = renderPortrait(withContent());
+    expect(out).toContain("## 무엇에 썼나");
+    expect(out).toContain("구현");
+    expect(out).toContain("TypeScript");
+    const section = out.slice(out.indexOf("## 무엇에 썼나"), out.indexOf("## 본인 메모"));
+    expect(section).not.toContain("508"); // 카운트 비노출
+    expect(section).not.toMatch(/[/\\]/); // 경로 구분자 비노출
+  });
+
+  it("contentSummary가 없으면 섹션이 없다", () => {
+    expect(renderPortrait(fixture())).not.toContain("## 무엇에 썼나");
+  });
+});

@@ -9,9 +9,10 @@
  */
 
 import { aggregate, type AggregatedMetrics } from "./metrics.js";
+import { summarizeContent, type ContentSummary } from "./content.js";
 import { toKstDateString } from "./day.js";
 import { PRICING_TABLE_VERSION } from "../pricing.js";
-import type { NormalizedSession, TokenTotals } from "../types.js";
+import type { NormalizedSession, SessionContentDigest, TokenTotals } from "../types.js";
 
 export interface ModelShare {
   model: string;
@@ -63,6 +64,8 @@ export interface UsageAnalysis {
   pricingVersion: string;
   /** 소스(도구)별 집계. 단일 소스면 길이 1. 옵셔널(기존 픽스처 호환; analyze는 항상 채움). */
   byTool?: ToolBucket[];
+  /** 세션 내용 요약(Claude Code cost-known만). content 있는 세션 없으면 생략. */
+  contentSummary?: ContentSummary;
 }
 
 function displayTokensOf(t: TokenTotals): number {
@@ -123,6 +126,12 @@ export function analyze(
 
   const overall = aggregate(knownSessions);
   const totalDisplay = metricsDisplayTokens(overall);
+
+  // 내용 요약 — cost-known 세션의 digest만(cost-unknown은 content 있어도 제외 → 격리).
+  const contentDigests = knownSessions
+    .map((s) => s.content)
+    .filter((c): c is SessionContentDigest => c !== undefined);
+  const contentSummary = contentDigests.length > 0 ? summarizeContent(contentDigests) : undefined;
 
   // 모델 비중.
   const byModel: ModelShare[] = overall.byModel.map((m) => {
@@ -222,5 +231,6 @@ export function analyze(
     hasUnknownModel: overall.hasUnknownModel,
     pricingVersion: PRICING_TABLE_VERSION,
     byTool,
+    ...(contentSummary ? { contentSummary } : {}),
   };
 }

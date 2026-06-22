@@ -17,6 +17,11 @@ import { renderPortrait, type PortraitOptions } from "./core/portrait.js";
 import { toKstDateString } from "./core/day.js";
 import { createAnthropicSummarizer, createAnthropicNarrator } from "./llm/anthropic.js";
 import { runHook, type HookOptions } from "./core/hook.js";
+import { runInit, INIT_MODULE_URL, type InitIo } from "./core/init.js";
+import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname } from "node:path";
+import { spawnSync } from "node:child_process";
 
 function usage(): void {
   process.stderr.write(
@@ -47,6 +52,7 @@ function usage(): void {
       "    --sessions <file>   세션 파일 명시(반복 가능)",
       "  aimm hook [옵션]                          초안을 ~/aimm/draft-<date>.md로 생성(SessionEnd hook용)",
       "    --date/--author/--repo  standup과 동일",
+      "  aimm init [--dry-run]                     SessionEnd hook·MCP 자동 등록(원커맨드 셋업)",
       "  aimm mcp                                  MCP stdio 서버 시작(Claude Code가 호출)",
       "",
     ].join("\n"),
@@ -187,6 +193,60 @@ async function cmdPortrait(args: string[]): Promise<number> {
   return 0;
 }
 
+/** claude mcp add(user scope) 시도. 성공 true. 부재/실패/타임아웃 false → 호출부가 .mcp.json 폴백. */
+function trySpawnClaude(absCliJs: string): boolean {
+  try {
+    const r = spawnSync("claude", ["mcp", "add", "aimm", "--scope", "user", "--", "node", absCliJs, "mcp"], {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 15000,
+      encoding: "utf-8",
+      shell: process.platform === "win32",
+    });
+    return r.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function cmdInit(args: string[]): Promise<number> {
+  const flags = parseFlags(args);
+  const dryRun = flags["dry-run"] !== undefined;
+  const io: InitIo = {
+    homedir: () => homedir(),
+    cwd: () => process.cwd(),
+    now: () => new Date().toISOString().replace(/[:.]/g, "-"),
+    readFile: (p) => (existsSync(p) ? readFileSync(p, "utf-8") : null),
+    writeFile: (p, c) => {
+      mkdirSync(dirname(p), { recursive: true });
+      writeFileSync(p, c);
+    },
+    backup: (p) => {
+      const b = `${p}.aimm-bak-${io.now()}`;
+      copyFileSync(p, b);
+      return b;
+    },
+    registerMcp: (abs) => trySpawnClaude(abs),
+  };
+
+  const r = runInit(io, INIT_MODULE_URL, { dryRun });
+  const out: string[] = [];
+  out.push(dryRun ? "[dry-run] aimm init — 변경 예정:" : "aimm init 완료:");
+  out.push(`  CLI: ${r.cliJs}`);
+  out.push(`  SessionEnd hook: ${r.hookAction} → ${r.settingsPath}`);
+  out.push(`  MCP 등록: ${r.mcpVia === "claude" ? "claude mcp add --scope user" : `.mcp.json (${r.mcpJsonPath})`}`);
+  if (r.mcpVia === "mcp.json") {
+    out.push(`  ↳ 전역 등록을 원하면: claude mcp add aimm --scope user -- node ${JSON.stringify(r.cliJs)} mcp`);
+  }
+  for (const w of r.warnings) out.push(`  ⚠️ ${w}`);
+  if (r.backups.length > 0) out.push(`  백업: ${r.backups.join(", ")}`);
+  if (!dryRun) {
+    out.push("  복구: 위 백업을 원위치로 복사 + `claude mcp remove aimm` + .mcp.json의 aimm 항목 제거.");
+    out.push("  다음: Claude Code를 재시작하면 SessionEnd 초안·MCP 도구가 활성화됩니다.");
+  }
+  process.stdout.write(out.join("\n") + "\n");
+  return 0;
+}
+
 async function cmdMetrics(files: string[]): Promise<number> {
   if (files.length === 0) {
     process.stderr.write("metrics: JSONL 파일 경로가 필요합니다.\n");
@@ -217,6 +277,8 @@ async function main(): Promise<number> {
       return cmdPortrait(rest);
     case "hook":
       return cmdHook(rest);
+    case "init":
+      return cmdInit(rest);
     case "mcp":
       return cmdMcp();
     case undefined:

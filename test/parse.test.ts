@@ -147,6 +147,22 @@ describe("parseSessionContent — 내용 다이제스트", () => {
     expect(session.messages).toHaveLength(1); // 메트릭 불변
   });
 
+  it("file_path/command 외 input 필드(path·pattern·url)는 다이제스트에 안 들어간다(누출 방지 회귀)", () => {
+    const content = assistantTools("2026-06-02T10:00:00.000Z", [
+      { type: "tool_use", name: "Grep", input: { pattern: "/secret/leak", path: "/home/u/private" } },
+      { type: "tool_use", name: "WebFetch", input: { url: "https://example.com/token.txt" } },
+    ]);
+    const { session } = parseSessionContent(content, "s1");
+    const c = session.content!;
+    expect(c.toolUses).toEqual({ Grep: 1, WebFetch: 1 }); // 도구명만(닫힌 어휘)
+    expect(c.fileExts).toEqual({}); // path/pattern은 읽지 않음 — .txt는 url이지 file_path 아님
+    expect(c.commandVerbs).toEqual({});
+    const s = JSON.stringify(c);
+    expect(s).not.toContain("/secret");
+    expect(s).not.toContain("example.com");
+    expect(s).not.toMatch(/[/\\]/);
+  });
+
   it("기존 user 'hi' 라인은 userPrompts:1을 기여하되 메트릭은 불변", () => {
     const content = [
       JSON.stringify({ timestamp: "2026-06-02T10:00:00.000Z", message: { role: "user", content: "hi" } }),

@@ -70,6 +70,12 @@ describe("mergeMcpJson", () => {
     expect((j.mcpServers as any).aimm.args).toEqual(["/r/dist/cli.js", "mcp"]);
     expect((j.mcpServers as any).other).toBeDefined();
   });
+  it("기존 aimm 항목의 사용자 키(env 등)를 보존한다(우리 키만 딥머지)", () => {
+    const j = mergeMcpJson({ mcpServers: { aimm: { env: { FOO: "1" }, command: "old" } } }, "/r/dist/cli.js");
+    expect((j.mcpServers as any).aimm.env).toEqual({ FOO: "1" }); // 사용자 키 보존
+    expect((j.mcpServers as any).aimm.command).toBe("node"); // 우리 키 갱신
+    expect((j.mcpServers as any).aimm.args).toEqual(["/r/dist/cli.js", "mcp"]);
+  });
 });
 
 describe("runInit", () => {

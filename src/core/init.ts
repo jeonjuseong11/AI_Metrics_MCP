@@ -57,7 +57,11 @@ export function mergeSessionEndHook(
 export function mergeMcpJson(json: unknown, absCliJs: string): Record<string, unknown> {
   const j = asObj(json);
   const servers = (j.mcpServers = asObj(j.mcpServers));
-  servers.aimm = { command: "node", args: [absCliJs, "mcp"] };
+  // 기존 aimm 항목의 사용자 키(env·cwd 등)는 보존하고 command/args만 갱신(우리 키만 딥머지).
+  const aimm = asObj(servers.aimm);
+  aimm.command = "node";
+  aimm.args = [absCliJs, "mcp"];
+  servers.aimm = aimm;
   return j;
 }
 

@@ -10,6 +10,7 @@
 import { maskSecrets, type Redaction } from "./mask.js";
 import { SummarizerError, type Summarizer } from "../llm/summarizer.js";
 import { shortModelName, prettyProject } from "./render.js";
+import { OTHER } from "./content.js";
 import type { UsageAnalysis } from "./analysis.js";
 import type { SituationSummary } from "./situation.js";
 
@@ -80,6 +81,20 @@ export function buildNarrativeContext(a: UsageAnalysis, situation?: SituationSum
 
   if (a.busiestDay) {
     lines.push(`[가장 활발] ${a.busiestDay.date} ($${a.busiestDay.costUsd.toFixed(2)})`);
+  }
+
+  // 작업내용(세션 내용) — 카테고리·정수만(구성상 프라이버시-클린; 마스킹은 심층방어).
+  const cs = a.contentSummary;
+  if (cs && cs.sessionsWithContent > 0) {
+    const parts: string[] = [];
+    const act = cs.activity.map((x) => `${x.category}${Math.round(x.share * 100)}%`).join("·");
+    if (act) parts.push(`활동 ${act}`);
+    const areas = cs.areas.slice(0, 4).map((x) => x.area).join("·");
+    if (areas) parts.push(`영역 ${areas}`);
+    const cmds = cs.commands.filter((c) => c.category !== OTHER).map((c) => c.category).join("·");
+    if (cmds) parts.push(`명령 ${cmds}`);
+    parts.push(`요청 ${cs.userPrompts}건`);
+    lines.push(`[작업내용] ${parts.join(" · ")}`);
   }
 
   if (situation && situation.total > 0) {

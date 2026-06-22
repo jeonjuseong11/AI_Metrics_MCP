@@ -149,7 +149,12 @@ ANTHROPIC_API_KEY=sk-ant-... npx tsx src/cli.ts analyze --start 2026-06-08 --end
 
 ### Claude Code 연동 (hook · MCP)
 
-빌드 후(`npm run build`) `dist/cli.js`를 진입점으로 등록한다. `<ABS>`는 이 저장소 절대경로.
+**원커맨드:** `node dist/cli.js init` 한 번이면 아래 ①②를 자동 등록한다 — `~/.claude/settings.json`에
+SessionEnd hook을 멱등 병합(타임스탬프 백업)하고, `claude`가 있으면 `claude mcp add --scope user`로
+MCP를 등록(없으면 `.mcp.json` 폴백 + 명령 출력)한다. `--dry-run`으로 변경 예정만 미리 볼 수 있다.
+
+아래는 직접 등록하려는 경우의 수동 절차다. 빌드 후(`npm install`이 자동 빌드) `dist/cli.js`를
+진입점으로 쓰며, `<ABS>`는 이 저장소 절대경로.
 
 **① SessionEnd hook (자동 초안)** — `~/.claude/settings.json`:
 
@@ -237,11 +242,13 @@ src/
     metrics.ts        결정적 토큰·비용 집계(LLM 우회)
     day.ts            KST day boundary
     mask.ts           비밀 마스킹(gitleaks 룰셋, fail-closed)
-    analysis.ts       개인 사용 분석 롤업(모델 믹스·추세·시간대·프로젝트)
+    analysis.ts       개인 사용 분석 롤업(모델 믹스·추세·시간대·프로젝트·내용 요약)
+    content.ts        세션 내용 다이제스트 분류·롤업(결정적, 닫힌 어휘)
     summarize.ts      "어제 한 일" 요약 + 마스킹 전송 경계
     render.ts         초안·메트릭·분석 렌더(빈/에러 상태)
     standup.ts        오케스트레이터(CLI/hook/MCP 공유 코어)
     hook.ts           SessionEnd hook 진입(초안을 파일로, 실패 시 에러 노트)
+    init.ts           aimm init(hook·MCP 자동 등록, 센티넬 멱등·백업)
   llm/
     summarizer.ts     Summarizer 인터페이스 + 에러(DI)
     anthropic.ts      실제 Anthropic 요약기(haiku, env 키)
@@ -251,19 +258,20 @@ src/
     sessions.ts       세션 JSONL 읽기
     git.ts            git 수집(child_process)
     discover.ts       세션 파일 발견(~/.claude/projects)
-  cli.ts              진입점: metrics / standup / analyze / hook / mcp
-test/                 6개 파일, 44 테스트
+  cli.ts              진입점: metrics / standup / analyze / portrait / init / hook / mcp
+test/                 21개 파일, 178 테스트
 ```
 
 ## 상태 & 로드맵
 
 **완료:** 파서 · 결정적 메트릭(캐시 반영) · 마스킹(fail-closed, 적대 테스트) ·
 KST 일자 · 렌더(빈/에러 상태) · standup 오케스트레이터 · 개인 사용 분석(analyze) ·
-LLM 요약 + 마스킹 전송 경계(드라이런/--send, 폴백) · **진입점(SessionEnd hook · MCP 서버)** ·
-CLI. 61 테스트 그린.
+LLM 요약/내러티브 + 마스킹 전송 경계(드라이런/--send, 폴백) · 멀티소스 어댑터(Cursor) ·
+**세션 내용 요약**(analyze/portrait/narrative에 "무엇을 했나" — 결정적 닫힌-어휘) ·
+**진입점(SessionEnd hook · MCP 서버 · `aimm init`)** · CLI. **178 테스트 그린.**
 
 **다음 (마이너):**
-- `.aimm-ignore` 파서(민감 저장소 수집 제외), `aimm init`(hook·MCP 자동 등록)
+- `.aimm-ignore` 파서(민감 저장소 수집 제외), 주제 키워드 추출(마스킹 검토 후)
 
 **단계별 발전 방향:** [ROADMAP.md](./ROADMAP.md) 참고.
 Phase 1(단일 LLM 분석 심화) → Phase 2(멀티 LLM, 로컬 로그 우선) →

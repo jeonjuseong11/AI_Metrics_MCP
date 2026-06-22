@@ -28,6 +28,18 @@ export interface TokenTotals {
   cacheCreation: number;
 }
 
+/**
+ * 세션 내용 다이제스트 — 닫힌 어휘 카운트만(프라이버시 구성상 보장).
+ * 키: 도구 레지스트리명 / 알려진 확장자∪"기타" / 허용목록 동사∪"기타".
+ * 원시 경로·명령 문자열·프롬프트 텍스트는 분류 후 버려지고 여기 저장되지 않는다.
+ */
+export interface SessionContentDigest {
+  userPrompts: number;
+  toolUses: Record<string, number>;
+  fileExts: Record<string, number>;
+  commandVerbs: Record<string, number>;
+}
+
 /** 정규화된 단일 assistant 메시지. */
 export interface NormalizedMessage {
   /** 모델 ID, 예: "claude-opus-4-8". 누락 시 "unknown". */
@@ -44,6 +56,8 @@ export interface NormalizedSession {
   source?: string;
   /** 세션이 속한 프로젝트 경로(역슬러그). 없으면 undefined. */
   projectPath: string | undefined;
+  /** 대화 내용 다이제스트(Claude Code만; 신호 없으면 생략). */
+  content?: SessionContentDigest;
   messages: NormalizedMessage[];
   /** 세션 첫/마지막 메시지 시각. 메시지 0개면 둘 다 undefined. */
   startTime: Date | undefined;

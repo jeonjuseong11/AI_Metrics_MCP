@@ -5,6 +5,7 @@ import type { Commit } from "../src/parse/git.js";
 import type { NormalizedSession, TokenTotals } from "../src/types.js";
 import type { UsageAnalysis } from "../src/core/analysis.js";
 import type { SituationSummary } from "../src/core/situation.js";
+import { OTHER } from "../src/core/content.js";
 
 function tk(p: Partial<TokenTotals>): TokenTotals {
   return { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, ...p };
@@ -115,5 +116,51 @@ describe("renderAnalysis 작업 성격 섹션", () => {
 
   it("situation이 없으면 '작업 성격' 섹션이 없다", () => {
     expect(renderAnalysis(analysisFixture())).not.toContain("## 작업 성격");
+  });
+});
+
+describe("renderAnalysis 무엇을 했나 섹션", () => {
+  function withContent(): UsageAnalysis {
+    const a = analysisFixture();
+    a.contentSummary = {
+      sessionsWithContent: 8,
+      userPrompts: 278,
+      totalToolUses: 1800,
+      activity: [
+        { category: "구현", count: 880, share: 880 / 1800 },
+        { category: "탐색", count: 500, share: 500 / 1800 },
+        { category: "실행·검증", count: 420, share: 420 / 1800 },
+      ],
+      areas: [
+        { area: "TypeScript", count: 508 },
+        { area: "문서", count: 240 },
+      ],
+      commands: [
+        { category: "패키지", count: 83, exampleVerbs: ["npm", "pnpm", "npx"] },
+        { category: OTHER, count: 12, exampleVerbs: [] },
+      ],
+    };
+    return a;
+  }
+
+  it("contentSummary가 있으면 '무엇을 했나' 섹션을 넣는다", () => {
+    const out = renderAnalysis(withContent());
+    expect(out).toContain("## 무엇을 했나 (세션 내용 기반)");
+    expect(out).toContain("구현 49%");
+    expect(out).toContain("TypeScript 508");
+    expect(out).toContain("패키지(npm·pnpm·npx 83)");
+    expect(out).toContain("기타 12"); // 기타는 카운트만, 예시 없음
+    expect(out).toContain("사용자 요청 ~278건");
+    expect(out).toContain("서브에이전트 내부 작업은 제외");
+  });
+
+  it("내용 섹션에 경로 구분자(/ \\)가 없다(프라이버시)", () => {
+    const out = renderAnalysis(withContent());
+    const section = out.slice(out.indexOf("## 무엇을 했나"));
+    expect(section).not.toMatch(/[/\\]/);
+  });
+
+  it("contentSummary가 없으면 섹션이 없다", () => {
+    expect(renderAnalysis(analysisFixture())).not.toContain("## 무엇을 했나");
   });
 });

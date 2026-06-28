@@ -106,6 +106,7 @@ export interface InitResult {
   cliJs: string;
   settingsPath: string;
   hookAction: "add" | "replace" | "noop";
+  sessionStartAction: "add" | "replace" | "noop";
   mcpVia: "claude" | "mcp.json";
   mcpJsonPath: string;
   warnings: string[];
@@ -133,15 +134,20 @@ export function runInit(io: InitIo, moduleUrl: string, opts: { dryRun?: boolean 
   const settingsPath = join(io.homedir(), ".claude", "settings.json");
   const raw = io.readFile(settingsPath);
   const command = `node ${JSON.stringify(cliJs)} hook`;
-  const { settings: merged, action } = mergeSessionEndHook(raw ? JSON.parse(raw) : {}, command);
+  const ssCommand = `node ${JSON.stringify(cliJs)} session-start`;
+  const endMerge = mergeSessionEndHook(raw ? JSON.parse(raw) : {}, command);
+  const startMerge = mergeSessionStartHook(endMerge.settings, ssCommand);
+  const merged = startMerge.settings;
+  const action = endMerge.action;
+  const sessionStartAction = startMerge.action;
 
   const mcpJsonPath = join(io.cwd(), ".mcp.json");
 
   if (opts.dryRun) {
-    return { cliJs, settingsPath, hookAction: action, mcpVia: "claude", mcpJsonPath, warnings, backups };
+    return { cliJs, settingsPath, hookAction: action, sessionStartAction, mcpVia: "claude", mcpJsonPath, warnings, backups };
   }
 
-  if (action !== "noop") {
+  if (action !== "noop" || sessionStartAction !== "noop") {
     if (raw !== null) backups.push(io.backup(settingsPath));
     io.writeFile(settingsPath, JSON.stringify(merged, null, 2) + "\n");
   }
@@ -154,5 +160,5 @@ export function runInit(io: InitIo, moduleUrl: string, opts: { dryRun?: boolean 
     io.writeFile(mcpJsonPath, JSON.stringify(mergeMcpJson(existing ? JSON.parse(existing) : {}, cliJs), null, 2) + "\n");
   }
 
-  return { cliJs, settingsPath, hookAction: action, mcpVia, mcpJsonPath, warnings, backups };
+  return { cliJs, settingsPath, hookAction: action, sessionStartAction, mcpVia, mcpJsonPath, warnings, backups };
 }

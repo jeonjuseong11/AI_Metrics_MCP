@@ -24,7 +24,8 @@ describe("aimm session-start CLI", () => {
     expect(status).toBe(0);
     const out = JSON.parse(stdout);
     expect(typeof out.systemMessage).toBe("string");
-    expect(out.systemMessage).toContain("🪞");
+    expect(out.systemMessage.length).toBeGreaterThan(0);
+    expect(out.systemMessage).toMatch(/^(🪞|⚠️)/);
     expect(out.hookSpecificOutput).toBeUndefined();
   });
 

@@ -261,6 +261,7 @@ async function cmdInit(args: string[]): Promise<number> {
   out.push(dryRun ? "[dry-run] aimm init — 변경 예정:" : "aimm init 완료:");
   out.push(`  CLI: ${r.cliJs}`);
   out.push(`  SessionEnd hook: ${r.hookAction} → ${r.settingsPath}`);
+  out.push(`  SessionStart hook: ${r.sessionStartAction} → ${r.settingsPath}`);
   out.push(`  MCP 등록: ${r.mcpVia === "claude" ? "claude mcp add --scope user" : `.mcp.json (${r.mcpJsonPath})`}`);
   if (r.mcpVia === "mcp.json") {
     out.push(`  ↳ 전역 등록을 원하면: claude mcp add aimm --scope user -- node ${JSON.stringify(r.cliJs)} mcp`);

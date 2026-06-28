@@ -117,6 +117,42 @@ describe("runInit", () => {
     const s = JSON.parse(io.files[SETTINGS]!);
     expect(s.hooks.SessionEnd).toHaveLength(1);
   });
+
+  it("runInit registers BOTH SessionEnd and SessionStart hooks", () => {
+    let written = "";
+    const io = {
+      homedir: () => "/home/u",
+      cwd: () => "/repo",
+      now: () => "T",
+      readFile: () => null,
+      writeFile: (_p: string, c: string) => { written = c; },
+      backup: () => "/bak",
+      registerMcp: () => true,
+    };
+    const r = runInit(io, MODULE_URL);
+    expect(r.hookAction).toBe("add");
+    expect(r.sessionStartAction).toBe("add");
+    const parsed = JSON.parse(written);
+    const endCmds = parsed.hooks.SessionEnd[0].hooks[0].command;
+    const startCmds = parsed.hooks.SessionStart[0].hooks[0].command;
+    expect(endCmds).toContain("cli.js");
+    expect(endCmds).toContain("hook");
+    expect(startCmds).toContain("session-start");
+  });
+
+  it("runInit is idempotent across both hooks (second run noop)", () => {
+    let store: string | null = null;
+    const io = {
+      homedir: () => "/home/u", cwd: () => "/repo", now: () => "T",
+      readFile: () => store,
+      writeFile: (_p: string, c: string) => { store = c; },
+      backup: () => "/bak", registerMcp: () => true,
+    };
+    runInit(io, MODULE_URL);
+    const r2 = runInit(io, MODULE_URL);
+    expect(r2.hookAction).toBe("noop");
+    expect(r2.sessionStartAction).toBe("noop");
+  });
 });
 
 describe("SessionStart hook markers", () => {
@@ -126,6 +162,8 @@ describe("SessionStart hook markers", () => {
   it("markers do not cross-match", () => {
     expect(isAimmSessionStartHook(ssCmd)).toBe(true);
     expect(isAimmSessionStartHook(endCmd)).toBe(false);
+    // reverse direction: isAimmHook must not match session-start command
+    expect(isAimmHook(ssCmd)).toBe(false);
   });
 
   it("merge adds SessionStart group when absent", () => {

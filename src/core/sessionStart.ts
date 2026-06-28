@@ -23,7 +23,7 @@ export interface SessionStartOptions {
 function busiestWeekday(week: UsageAnalysis): string | undefined {
   if (week.byDay.length === 0) return undefined;
   const byWd = new Array<number>(7).fill(0);
-  for (const d of week.byDay) byWd[weekdayOf(d.date)] += d.sessions;
+  for (const d of week.byDay) { const i = weekdayOf(d.date); byWd[i] = (byWd[i] ?? 0) + d.sessions; }
   let best = -1;
   let bestN = 0;
   for (let wd = 0; wd < 7; wd++) {

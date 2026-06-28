@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSessionSource, shouldMirror, toHookOutput } from "../src/core/sessionStart.js";
+import { parseSessionSource, shouldMirror, toHookOutput, failureGlance } from "../src/core/sessionStart.js";
 
 describe("session-start helpers", () => {
   it("parseSessionSource extracts source from stdin JSON", () => {
@@ -22,5 +22,23 @@ describe("session-start helpers", () => {
     const out = JSON.parse(toHookOutput("🪞 hi"));
     expect(out.systemMessage).toBe("🪞 hi");
     expect(out.hookSpecificOutput).toBeUndefined();
+  });
+});
+
+describe("failureGlance", () => {
+  it("strips path separators from Error messages", () => {
+    const result = failureGlance(new Error("ENOENT C:\\Users\\x /y"));
+    expect(result).toMatch(/^⚠️/);
+    expect(result).not.toMatch(/[\\/]/);
+  });
+  it("handles non-Error thrown values (no 'undefined' in output)", () => {
+    const result = failureGlance("something went wrong");
+    expect(result).toMatch(/^⚠️ AIMM 거울 생성 실패: /);
+    expect(result).not.toContain("undefined");
+    expect(result.length).toBeGreaterThan("⚠️ AIMM 거울 생성 실패: ".length);
+  });
+  it("falls back to 알 수 없는 오류 for empty message", () => {
+    const result = failureGlance(new Error(""));
+    expect(result).toContain("알 수 없는 오류");
   });
 });

@@ -56,8 +56,15 @@ export async function runSessionStart(opts: SessionStartOptions = {}): Promise<s
     if (wd) input.weekBusiestWeekday = wd;
     return renderGlance(input);
   } catch (err) {
-    return `⚠️ AIMM 거울 생성 실패: ${(err as Error).message}`;
+    return failureGlance(err);
   }
+}
+
+/** 실패 폴백 메시지 — 닫힌 어휘 유지: 경로 구분자 제거 + non-Error 안전. */
+export function failureGlance(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const safe = raw.replace(/[\\/]/g, "·").trim() || "알 수 없는 오류";
+  return `⚠️ AIMM 거울 생성 실패: ${safe}`;
 }
 
 /** stdin JSON에서 source 추출. 부재/파싱실패 시 "unknown". */

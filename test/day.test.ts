@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toKstDateString, kstDayRange, yesterdayKst, commitsOnKstDay, sessionsOnKstDay, daysBetweenInclusive } from "../src/core/day.js";
+import { toKstDateString, kstDayRange, yesterdayKst, commitsOnKstDay, sessionsOnKstDay, daysBetweenInclusive, WEEKDAY, weekdayOf, isoDatePlusDays } from "../src/core/day.js";
 import type { Commit } from "../src/parse/git.js";
 import type { NormalizedSession } from "../src/types.js";
 
@@ -50,5 +50,19 @@ describe("daysBetweenInclusive", () => {
   it("inclusive 일수", () => {
     expect(daysBetweenInclusive("2026-06-01", "2026-06-15")).toBe(15);
     expect(daysBetweenInclusive("2026-05-11", "2026-06-15")).toBe(36);
+  });
+});
+
+describe("weekday/week helpers", () => {
+  it("weekdayOf maps KST date string to 0=일..6=토 (locale-independent)", () => {
+    // 2026-06-28 is a Sunday
+    expect(weekdayOf("2026-06-28")).toBe(0);
+    expect(WEEKDAY[weekdayOf("2026-06-28")]).toBe("일");
+    expect(WEEKDAY[weekdayOf("2026-06-24")]).toBe("수");
+  });
+  it("isoDatePlusDays shifts by n days (UTC math)", () => {
+    expect(isoDatePlusDays("2026-06-28", -6)).toBe("2026-06-22");
+    expect(isoDatePlusDays("2026-06-28", 0)).toBe("2026-06-28");
+    expect(isoDatePlusDays("2026-06-30", 1)).toBe("2026-07-01");
   });
 });

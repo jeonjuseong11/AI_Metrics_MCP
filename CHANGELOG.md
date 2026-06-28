@@ -4,6 +4,16 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.7.0] — 2026-06-28 · SessionStart 거울 — 매일 열 때 한 줄 현황
+
+Claude Code를 열 때마다(startup · resume) SessionStart hook이 어제·이번주(최근7일) 비용-확인 사용 현황을
+`top-level systemMessage`로 한 줄 표시. `aimm init`이 SessionStart hook도 멱등 등록(별개 마커, 비교차).
+`renderGlance` 포매터(정상 · 어제-없음 · cold-start 세 변형). 헬퍼 `weekdayOf`/`WEEKDAY`/`isoDatePlusDays`를
+`patterns.ts`→`day.ts`로 hoist. **스파이크 정정**: top-level `systemMessage`만 Claude Code에 표시됨
+(중첩 `hookSpecificOutput.systemMessage` = 미노출). 테스트 178 → 204 그린.
+
+→ 상세: [docs/releases/v0.7.0-session-start-mirror.md](docs/releases/v0.7.0-session-start-mirror.md)
+
 ## [0.6.0] — 2026-06-22 · 세션 내용 요약 + 클린 설치/aimm init
 
 파서가 버리던 `message.content`(tool_use·사용자 프롬프트)를 결정적 **닫힌-어휘 다이제스트**로 추출 → analyze/portrait/주간

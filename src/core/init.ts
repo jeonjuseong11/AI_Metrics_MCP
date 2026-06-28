@@ -18,6 +18,12 @@ export function isAimmHook(command: string): boolean {
   return HOOK_MARKER.test(command);
 }
 
+/** SessionStart hook 마커 — SessionEnd(`… hook`)와 교차매칭 안 되게 `session-start` 서브커맨드로 판정. */
+const SESSION_START_MARKER = /(?:^|[\\/])cli\.js["']?\s+session-start(?:\s|$)/;
+export function isAimmSessionStartHook(command: string): boolean {
+  return SESSION_START_MARKER.test(command);
+}
+
 function deepCopy<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
@@ -44,6 +50,27 @@ export function mergeSessionEndHook(
     if (!group || !Array.isArray(group.hooks)) continue;
     for (const h of group.hooks) {
       if (h && h.type === "command" && typeof h.command === "string" && isAimmHook(h.command)) {
+        if (h.command === command) return { settings: s, action: "noop" };
+        h.command = command;
+        return { settings: s, action: "replace" };
+      }
+    }
+  }
+  list.push({ hooks: [{ type: "command", command }] });
+  return { settings: s, action: "add" };
+}
+
+export function mergeSessionStartHook(
+  settings: unknown,
+  command: string,
+): { settings: Record<string, unknown>; action: "add" | "replace" | "noop" } {
+  const s = asObj(settings);
+  const hooks = (s.hooks = asObj(s.hooks));
+  const list = (Array.isArray(hooks.SessionStart) ? hooks.SessionStart : (hooks.SessionStart = [])) as HookGroup[];
+  for (const group of list) {
+    if (!group || !Array.isArray(group.hooks)) continue;
+    for (const h of group.hooks) {
+      if (h && h.type === "command" && typeof h.command === "string" && isAimmSessionStartHook(h.command)) {
         if (h.command === command) return { settings: s, action: "noop" };
         h.command = command;
         return { settings: s, action: "replace" };

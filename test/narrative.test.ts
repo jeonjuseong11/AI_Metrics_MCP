@@ -134,6 +134,11 @@ const sampleSituation: SituationSummary = {
     { type: "fix", count: 3, share: 0.6 },
     { type: "feat", count: 2, share: 0.4 },
   ],
+  built: [
+    { type: "feat", subject: "feat: 거울 내용화" },
+    { type: "fix", subject: "fix: 폴백 보강" },
+  ],
+  builtTotal: 5,
 };
 
 describe("buildNarrativeContext 작업성격", () => {
@@ -144,8 +149,17 @@ describe("buildNarrativeContext 작업성격", () => {
     expect(ctx).toContain("커밋 5건");
   });
 
-  it("situation이 없으면 [작업성격] 줄이 없다", () => {
-    expect(buildNarrativeContext(fixture())).not.toContain("[작업성격]");
+  it("built가 있으면 [만든것] 줄(커밋 제목)을 추가한다", () => {
+    const ctx = buildNarrativeContext(fixture(), sampleSituation);
+    expect(ctx).toContain("[만든것]");
+    expect(ctx).toContain("feat: 거울 내용화");
+    expect(ctx).toContain("외 3건"); // builtTotal 5 - built 2
+  });
+
+  it("situation이 없으면 [작업성격]·[만든것] 줄이 없다", () => {
+    const ctx = buildNarrativeContext(fixture());
+    expect(ctx).not.toContain("[작업성격]");
+    expect(ctx).not.toContain("[만든것]");
   });
 });
 

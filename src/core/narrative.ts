@@ -97,6 +97,12 @@ export function buildNarrativeContext(a: UsageAnalysis, situation?: SituationSum
     lines.push(`[작업내용] ${parts.join(" · ")}`);
   }
 
+  if (situation && situation.built.length > 0) {
+    // "무엇을 만들었나" — LLM이 성과를 서술하도록 커밋 제목을 사실로 제공. 마스킹 경계를 통과한 뒤에만 전송된다.
+    const made = situation.built.map((b) => b.subject).join(" / ");
+    const rest = situation.builtTotal - situation.built.length;
+    lines.push(`[만든것] ${made}${rest > 0 ? ` 외 ${rest}건` : ""} (feat/fix/refactor/perf 커밋)`);
+  }
   if (situation && situation.total > 0) {
     const types = situation.byType.map((t) => `${t.type} ${pct(t.share)}`).join(" · ");
     lines.push(`[작업성격] ${types} (커밋 ${situation.total}건, repo 기준)`);

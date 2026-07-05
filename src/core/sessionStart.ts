@@ -8,8 +8,10 @@
 
 import { collectSessions, type CollectCommon } from "./standup.js";
 import { analyze } from "./analysis.js";
-import { yesterdayKst, isoDatePlusDays, weekdayOf, WEEKDAY, toKstDateString } from "./day.js";
+import { yesterdayKst, isoDatePlusDays, weekdayOf, WEEKDAY, toKstDateString, kstDayRange } from "./day.js";
 import { renderGlance, renderToday } from "./render.js";
+import { summarizeSituation } from "./situation.js";
+import { collectCommits } from "../fs/git.js";
 import type { UsageAnalysis } from "./analysis.js";
 
 /** 거울/today 수집창 — 자동 발견 파일을 최근 N일 mtime로 좁혀 startup 비용을 상수화. 분석창(≤8일)+슬랙. */
@@ -75,7 +77,15 @@ export async function runSessionStart(opts: SessionStartOptions = {}): Promise<s
  * `aimm today` 코어 — 오늘(지금까지) + 어제 + 이번주(오늘 포함) 풀뷰. claude-only.
  * parse-once: 세션을 1회 수집하고 analyze()를 세 범위(오늘·어제·이번주)로 부른다.
  */
-export async function runToday(opts: SessionStartOptions = {}): Promise<string> {
+export interface TodayOptions extends SessionStartOptions {
+  /** 주어지면 이 repo의 오늘 커밋(feat/fix/refactor/perf 제목)을 "만든 것"으로 표시. */
+  repoPath?: string;
+  author?: string;
+  /** 테스트·주입용 커밋 수집기. 미지정 시 실제 collectCommits. */
+  commitCollector?: typeof collectCommits;
+}
+
+export async function runToday(opts: TodayOptions = {}): Promise<string> {
   const now = opts.now ?? new Date();
   const tDate = toKstDateString(now);
   const yDate = yesterdayKst(now);
@@ -85,7 +95,21 @@ export async function runToday(opts: SessionStartOptions = {}): Promise<string> 
   const today = analyze(sessions, { start: tDate, end: tDate }, sourceMeta);
   const yesterday = analyze(sessions, { start: yDate, end: yDate }, sourceMeta);
   const week = analyze(sessions, { start: weekStart, end: tDate }, sourceMeta);
-  return renderToday(today, yesterday, week);
+
+  // --repo 시 오늘(KST) 커밋의 "만든 것"(feat/fix/refactor/perf 제목). git 실패는 무시(today는 계속).
+  let built: Array<{ type: string; subject: string }> | undefined;
+  if (opts.repoPath) {
+    try {
+      const { startUtc, endUtc } = kstDayRange(tDate);
+      const collector = opts.commitCollector ?? collectCommits;
+      const r = await collector(opts.repoPath, startUtc, endUtc, opts.author);
+      const s = summarizeSituation(r.commits);
+      if (s.built.length > 0) built = s.built;
+    } catch {
+      // git 수집 실패는 조용히 무시 — 사용 현황은 그대로 보여준다.
+    }
+  }
+  return renderToday(today, yesterday, week, built);
 }
 
 /** 실패 폴백 메시지 — 닫힌 어휘 유지: 경로 구분자 제거 + non-Error 안전. */

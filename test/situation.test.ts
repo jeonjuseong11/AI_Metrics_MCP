@@ -50,6 +50,41 @@ describe("summarizeSituation", () => {
   });
 });
 
+describe("summarizeSituation — 무엇을 만들었나(built)", () => {
+  it("feat/fix/refactor/perf 제목만 뽑고 docs/chore/기타는 제외", () => {
+    const s = summarizeSituation([
+      commit("feat: 거울"),
+      commit("docs: 노트"),
+      commit("refactor: seam"),
+      commit("chore: 잡무"),
+      commit("fix: 버그"),
+      commit("WIP 미지"),
+      commit("perf: 속도"),
+    ]);
+    expect(s.built.map((b) => b.subject)).toEqual(["feat: 거울", "refactor: seam", "fix: 버그", "perf: 속도"]);
+    expect(s.built.map((b) => b.type)).toEqual(["feat", "refactor", "fix", "perf"]);
+    expect(s.builtTotal).toBe(4);
+  });
+
+  it("입력(git log) 순서를 유지한다(최신 우선)", () => {
+    const s = summarizeSituation([commit("feat: 나중"), commit("fix: 중간"), commit("feat: 처음")]);
+    expect(s.built.map((b) => b.subject)).toEqual(["feat: 나중", "fix: 중간", "feat: 처음"]);
+  });
+
+  it("MAX_BUILT(8) 초과 시 built는 상한, builtTotal은 전체", () => {
+    const commits = Array.from({ length: 11 }, (_, i) => commit(`feat: f${i}`));
+    const s = summarizeSituation(commits);
+    expect(s.built.length).toBe(8);
+    expect(s.builtTotal).toBe(11);
+  });
+
+  it("built 없는 커밋(docs만)은 빈 배열", () => {
+    const s = summarizeSituation([commit("docs: a"), commit("chore: b")]);
+    expect(s.built).toEqual([]);
+    expect(s.builtTotal).toBe(0);
+  });
+});
+
 describe("labelCommitType", () => {
   it("알려진 타입에 한글 글로스를 붙인다", () => {
     expect(labelCommitType("fix")).toBe("fix(수정/디버깅)");

@@ -198,14 +198,23 @@ export function renderContentBlock(cs: ContentSummary): string[] {
  * 거울(renderGlance)이 맛보기라면 이건 상세. 3-window 빈상태 매트릭스를 명시 처리.
  * claude-only(cost-known)만 들어온다 — 호출부(runToday)가 claude 어댑터만 주입.
  */
-export function renderToday(today: UsageAnalysis, yesterday: UsageAnalysis, week: UsageAnalysis): string {
+export function renderToday(
+  today: UsageAnalysis,
+  yesterday: UsageAnalysis,
+  week: UsageAnalysis,
+  built?: Array<{ type: string; subject: string }>,
+): string {
   if (today.totals.sessions === 0 && yesterday.totals.sessions === 0 && week.totals.sessions === 0) {
     return "🪞 아직 기록 없음 — 다음 세션부터 쌓임";
   }
   const lines: string[] = [];
-  // 오늘(지금까지) — 3축 상세.
+  // 오늘(지금까지) — 3축 상세 + (--repo 시) 오늘 만든 것.
   if (today.totals.sessions > 0) {
     lines.push(`🪞 오늘(지금까지): ${today.totals.sessions}세션 · $${today.totals.costUsd.toFixed(2)}`);
+    // 만든 것 — 오늘 repo 커밋 제목(feat/fix/refactor/perf). today는 로컬 CLI 출력이라 원시 제목 OK.
+    if (built && built.length > 0) {
+      for (const b of built) lines.push(`  🔨 ${b.subject}`);
+    }
     const tc = today.contentSummary;
     if (tc && tc.sessionsWithContent > 0) lines.push(...renderContentBlock(tc));
   } else {
@@ -364,6 +373,22 @@ export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: st
   if (cs && cs.sessionsWithContent > 0) {
     lines.push("## 무엇을 했나 (세션 내용 기반)");
     lines.push(...renderContentBlock(cs));
+    lines.push("");
+  }
+
+  // 무엇을 만들었나 — 이 기간 만든 것(feat/fix/refactor/perf 커밋 제목) + 추정 비용. situation 있을 때만(--repo).
+  // 비용은 같은 기간 세션 총액(커밋별 귀속 아님 — 시간 추정). 커밋 제목은 사용자 자신의 git 로그(로컬 문서).
+  if (situation && situation.built.length > 0) {
+    lines.push(`## 무엇을 만들었나 (이 기간 추정 $${a.totals.costUsd.toFixed(2)})`);
+    for (const b of situation.built) {
+      lines.push(`- ${b.subject}`);
+    }
+    const rest = situation.builtTotal - situation.built.length;
+    if (rest > 0) lines.push(`- … 외 ${rest}건`);
+    lines.push(
+      `ℹ️ git 커밋 제목 기반(feat/fix/refactor/perf). 비용은 같은 기간 세션 추정치이지 ` +
+        `커밋별 귀속이 아닙니다(정산액 아님).`,
+    );
     lines.push("");
   }
 

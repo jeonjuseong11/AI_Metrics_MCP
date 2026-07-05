@@ -15,7 +15,9 @@ import { buildStandup, buildAnalysis, ANALYSIS_ADAPTERS, type StandupOptions, ty
 import { renderAnalysis } from "./core/render.js";
 import { renderPortrait, type PortraitOptions } from "./core/portrait.js";
 import { toKstDateString } from "./core/day.js";
-import { createAnthropicSummarizer, createAnthropicNarrator } from "./llm/anthropic.js";
+import { createAnthropicSummarizer, createAnthropicNarrator, createAnthropicBuiltSummarizer } from "./llm/anthropic.js";
+import { discoverSessionFiles } from "./fs/discover.js";
+import { collectIntents, prepareIntentSend } from "./core/intent.js";
 import { runHook, type HookOptions } from "./core/hook.js";
 import { runInit, INIT_MODULE_URL, type InitIo } from "./core/init.js";
 import { parseSessionSource, shouldMirror, toHookOutput, runSessionStart, runToday, failureGlance, type TodayOptions } from "./core/sessionStart.js";
@@ -195,6 +197,33 @@ async function cmdAnalyze(args: string[]): Promise<number> {
   opts.adapters = ANALYSIS_ADAPTERS; // analyze는 멀티소스(Claude Code + Cursor)
   const { analysis, warnings, narrative, preview, situation } = await buildAnalysis(opts);
   process.stdout.write(renderAnalysis(analysis, author, narrative, situation) + "\n");
+
+  // 무엇을 만들었나(내용 기반) — --llm 시. 원시 프롬프트+파일 경로 → 마스킹(fail-closed) → LLM 성과 서술.
+  // claude 세션 원시 텍스트만 다룸(이 경로에서만). --send 아니면 dry-run으로 보낼 내용만 보여줌.
+  if (useLlm) {
+    try {
+      const files = opts.sessionFiles ?? (await discoverSessionFiles());
+      const window: { start?: string; end?: string } = {};
+      if (opts.start) window.start = opts.start;
+      if (opts.end) window.end = opts.end;
+      const { masked, redactions } = prepareIntentSend(await collectIntents(files, window));
+      if (masked.trim() !== "") {
+        if (send) {
+          const built = await createAnthropicBuiltSummarizer()(masked);
+          process.stdout.write(`\n## 무엇을 만들었나 — 내용 기반 요약\n\n${built.trim()}\n`);
+          if (redactions.length > 0) warnings.push(`무엇을만들었나(내용): ${redactions.length}개 비밀 가림 후 전송`);
+        } else {
+          process.stderr.write(
+            `\n[dry-run] '무엇을 만들었나(내용)' 전송 예정 (${redactions.length}개 비밀 가림):\n` +
+              "─".repeat(50) + "\n" + masked + "\n" + "─".repeat(50) +
+              "\n실제 전송하려면 --send 를 추가하세요(ANTHROPIC_API_KEY 필요).\n",
+          );
+        }
+      }
+    } catch (err) {
+      warnings.push(`무엇을만들었나(내용) 생성 실패(마스킹 차단 가능): ${(err as Error).message}`);
+    }
+  }
 
   if (preview) {
     process.stderr.write(

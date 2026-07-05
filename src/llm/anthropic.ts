@@ -32,6 +32,15 @@ const NARRATIVE_SYSTEM_PROMPT = [
   "- 표는 문서에 남으므로 숫자 나열이 아니라 패턴 해석에 집중.",
 ].join("\n");
 
+const BUILT_SYSTEM_PROMPT = [
+  "당신은 개발자가 이 기간 AI에게 보낸 요청과 다룬 파일 목록을 받아 '무엇을 만들었나/어떤 작업을 했나'를 요약한다.",
+  "규칙:",
+  "- 요청·파일에 없는 성과·수치를 절대 지어내지 말 것. 목록에 있는 근거로만.",
+  "- 서술이지 평가가 아니다 — '이런 걸 만들었다/했다'이지 '잘 했다'가 아니다.",
+  "- 한국어 불릿 3~6개. 관련 요청을 묶어 *무엇을 만들었는지* 중심으로(파일 경로는 근거로만).",
+  "- 머리말·맺음말 없이 불릿만.",
+].join("\n");
+
 export interface AnthropicSummarizerOptions {
   model?: string;
   maxTokens?: number;
@@ -84,4 +93,9 @@ export function createAnthropicSummarizer(opts: AnthropicSummarizerOptions = {})
 /** 주간 사용 내레이터(분석용). env: AIMM_NARRATIVE_MODEL. */
 export function createAnthropicNarrator(opts: AnthropicSummarizerOptions = {}): Summarizer {
   return makeAnthropicCaller(NARRATIVE_SYSTEM_PROMPT, (ctx) => `사용 통계(사실 블록):\n${ctx}`, "AIMM_NARRATIVE_MODEL", opts);
+}
+
+/** "무엇을 만들었나(내용 기반)" 요약기 — 마스킹된 요청·파일에서 성과 서술. env: AIMM_BUILT_MODEL. */
+export function createAnthropicBuiltSummarizer(opts: AnthropicSummarizerOptions = {}): Summarizer {
+  return makeAnthropicCaller(BUILT_SYSTEM_PROMPT, (ctx) => `이 기간 요청·파일:\n${ctx}`, "AIMM_BUILT_MODEL", opts);
 }

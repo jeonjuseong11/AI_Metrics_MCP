@@ -4,6 +4,19 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.10.0] — 2026-07-05 · 무엇을 만들었나 — 내용 기반(요청·파일 → LLM)
+
+git 커밋(v0.9.0)을 넘어 **실제 프롬프트·다룬 파일을 읽고** "무엇을 만들었나"를 LLM이 서술한다.
+신규 `src/core/intent.ts`가 세션 원시 텍스트(user 요청 + tool_use 파일)를 KST 창별로 추출 →
+마스킹(fail-closed) → `analyze --llm --send`가 `## 무엇을 만들었나 — 내용 기반 요약` 프로즈 생성.
+**첫 원시-텍스트 외부 전송 기능** — 그래서 경계를 엄격히: (1) 원시 텍스트는 intent.ts 안에서만 살고
+digest/거울/초상은 절대 안 봄, (2) 파일은 **basename만**(머신 경로·홈·타 프로젝트 구조 제거),
+(3) 시스템·스킬 주입 메시지(command/task-notification/SKILL 덤프/거대 diff/리뷰 보일러플레이트)는
+노이즈로 필터, (4) `--send` 아니면 dry-run이 "보낼 내용"을 그대로 보여줌(fail-closed 미리보기).
+프롬프트·파일 상한(60·80·300자)으로 노출·비용 억제. 테스트 238 → 248 그린.
+
+→ 상세: [docs/releases/v0.10.0-content-summary.md](docs/releases/v0.10.0-content-summary.md)
+
 ## [0.9.0] — 2026-07-05 · 무엇을 만들었나 (비용 ↔ 성과)
 
 "어떻게 썼나"(도구 빈도)를 넘어 **"이 비용으로 무엇을 만들었나"**(git 커밋 성과)를 보여준다.

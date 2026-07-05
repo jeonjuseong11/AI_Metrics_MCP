@@ -25,6 +25,7 @@ import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { spawnSync } from "node:child_process";
+import { parseArgs } from "node:util";
 
 function usage(): void {
   process.stderr.write(
@@ -64,35 +65,38 @@ function usage(): void {
   );
 }
 
-/** 아주 작은 플래그 파서(반복 플래그는 배열). 의존성 없이 명시적으로. */
-function parseFlags(args: string[]): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a !== undefined && a.startsWith("--")) {
-      const key = a.slice(2);
-      const val = args[i + 1];
-      if (val !== undefined && !val.startsWith("--")) {
-        (out[key] ??= []).push(val);
-        i++;
-      } else {
-        (out[key] ??= []).push("");
-      }
-    }
-  }
-  return out;
+/** 명령 플래그 파서 — Node stdlib util.parseArgs. 반복 플래그(--sessions)는 배열, 나머지는 값/불린. */
+function parseFlags(args: string[]) {
+  const { values } = parseArgs({
+    args,
+    allowPositionals: true, // 비플래그 인자는 무시(관대)
+    options: {
+      date: { type: "string" },
+      author: { type: "string" },
+      repo: { type: "string" },
+      sessions: { type: "string", multiple: true },
+      start: { type: "string" },
+      end: { type: "string" },
+      llm: { type: "boolean" },
+      send: { type: "boolean" },
+      "dry-run": { type: "boolean" },
+    },
+  });
+  return values;
 }
 
 async function cmdStandup(args: string[]): Promise<number> {
   const flags = parseFlags(args);
   const opts: StandupOptions = {};
-  if (flags.date?.[0]) opts.date = flags.date[0];
-  if (flags.author?.[0]) opts.author = flags.author[0];
-  if (flags.repo?.[0]) opts.repoPath = flags.repo[0];
-  if (flags.sessions && flags.sessions.length > 0) opts.sessionFiles = flags.sessions.filter((s) => s !== "");
+  if (flags.date) opts.date = flags.date;
+  if (flags.author) opts.author = flags.author;
+  if (flags.repo) opts.repoPath = flags.repo;
+  // --sessions 존재 시(빈 배열이라도) 설정 → 자동 발견 스킵. 부재 시 undefined → 자동 발견.
+  const sessions = flags.sessions?.filter((s) => s !== "");
+  if (sessions) opts.sessionFiles = sessions;
 
-  const useLlm = flags.llm !== undefined;
-  const send = flags.send !== undefined;
+  const useLlm = flags.llm === true;
+  const send = flags.send === true;
   if (useLlm) {
     opts.useLlm = true;
     if (send) opts.summarizer = createAnthropicSummarizer();
@@ -123,9 +127,9 @@ async function cmdStandup(args: string[]): Promise<number> {
 async function cmdHook(args: string[]): Promise<number> {
   const flags = parseFlags(args);
   const opts: HookOptions = {};
-  if (flags.date?.[0]) opts.date = flags.date[0];
-  if (flags.author?.[0]) opts.author = flags.author[0];
-  if (flags.repo?.[0]) opts.repoPath = flags.repo[0];
+  if (flags.date) opts.date = flags.date;
+  if (flags.author) opts.author = flags.author;
+  if (flags.repo) opts.repoPath = flags.repo;
   const r = await runHook(opts);
   process.stderr.write(`${r.ok ? "초안 생성됨" : "초안 생성 실패(에러 노트 기록)"}: ${r.path}\n`);
   return r.ok ? 0 : 1;
@@ -161,9 +165,11 @@ async function cmdSessionStart(): Promise<number> {
 async function cmdToday(args: string[]): Promise<number> {
   const flags = parseFlags(args);
   const opts: TodayOptions = {};
-  if (flags.sessions && flags.sessions.length > 0) opts.sessionFiles = flags.sessions.filter((s) => s !== "");
-  if (flags.repo?.[0]) opts.repoPath = flags.repo[0];
-  if (flags.author?.[0]) opts.author = flags.author[0];
+  // --sessions 존재 시(빈 배열이라도) 설정 → 자동 발견 스킵. 부재 시 undefined → 자동 발견.
+  const sessions = flags.sessions?.filter((s) => s !== "");
+  if (sessions) opts.sessionFiles = sessions;
+  if (flags.repo) opts.repoPath = flags.repo;
+  if (flags.author) opts.author = flags.author;
   const out = await runToday(opts);
   process.stdout.write(out + "\n");
   return 0;
@@ -179,15 +185,17 @@ async function cmdMcp(): Promise<number> {
 async function cmdAnalyze(args: string[]): Promise<number> {
   const flags = parseFlags(args);
   const opts: AnalysisBuildOptions = {};
-  if (flags.start?.[0]) opts.start = flags.start[0];
-  if (flags.end?.[0]) opts.end = flags.end[0];
-  if (flags.sessions && flags.sessions.length > 0) opts.sessionFiles = flags.sessions.filter((s) => s !== "");
-  if (flags.repo?.[0]) opts.repoPath = flags.repo[0];
-  const author = flags.author?.[0];
+  if (flags.start) opts.start = flags.start;
+  if (flags.end) opts.end = flags.end;
+  // --sessions 존재 시(빈 배열이라도) 설정 → 자동 발견 스킵. 부재 시 undefined → 자동 발견.
+  const sessions = flags.sessions?.filter((s) => s !== "");
+  if (sessions) opts.sessionFiles = sessions;
+  if (flags.repo) opts.repoPath = flags.repo;
+  const author = flags.author;
   if (author) opts.author = author;
 
-  const useLlm = flags.llm !== undefined;
-  const send = flags.send !== undefined;
+  const useLlm = flags.llm === true;
+  const send = flags.send === true;
   if (useLlm) {
     opts.useLlm = true;
     if (send) opts.summarizer = createAnthropicNarrator();
@@ -246,10 +254,12 @@ async function cmdAnalyze(args: string[]): Promise<number> {
 async function cmdPortrait(args: string[]): Promise<number> {
   const flags = parseFlags(args);
   const opts: AnalysisBuildOptions = {};
-  if (flags.start?.[0]) opts.start = flags.start[0];
-  if (flags.end?.[0]) opts.end = flags.end[0];
-  if (flags.sessions && flags.sessions.length > 0) opts.sessionFiles = flags.sessions.filter((s) => s !== "");
-  const author = flags.author?.[0];
+  if (flags.start) opts.start = flags.start;
+  if (flags.end) opts.end = flags.end;
+  // --sessions 존재 시(빈 배열이라도) 설정 → 자동 발견 스킵. 부재 시 undefined → 자동 발견.
+  const sessions = flags.sessions?.filter((s) => s !== "");
+  if (sessions) opts.sessionFiles = sessions;
+  const author = flags.author;
 
   opts.adapters = ANALYSIS_ADAPTERS; // portrait도 멀티소스(Claude Code + Cursor)
   const { analysis, warnings } = await buildAnalysis(opts);
@@ -280,7 +290,7 @@ function trySpawnClaude(absCliJs: string): boolean {
 
 async function cmdInit(args: string[]): Promise<number> {
   const flags = parseFlags(args);
-  const dryRun = flags["dry-run"] !== undefined;
+  const dryRun = flags["dry-run"] === true;
   const io: InitIo = {
     homedir: () => homedir(),
     cwd: () => process.cwd(),

@@ -30,22 +30,37 @@ export function labelCommitType(type: string): string {
   return g ? `${type}(${g})` : type;
 }
 
+/**
+ * "만든 것"으로 셈하는 타입 — 제품을 빚는 커밋(신규·수정·리팩터·성능).
+ * docs/chore/style/ci/build/test/revert/기타는 작업이긴 하나 "무엇을 만들었나"엔 넣지 않는다(개수로만).
+ */
+export const BUILT_TYPES = new Set(["feat", "fix", "refactor", "perf"]);
+
+/** "무엇을 만들었나"에 나열할 커밋 제목 상한(나머지는 "외 N건"). */
+export const MAX_BUILT = 8;
+
 export interface SituationSummary {
   byType: Array<{ type: string; count: number; share: number }>;
   total: number;
+  /** "무엇을 만들었나" — BUILT_TYPES 커밋 제목(입력=git log 순서 유지, 최신 우선). */
+  built: Array<{ type: string; subject: string }>;
+  /** built에 포함된 커밋 총수(MAX_BUILT 초과분 "외 N건" 계산용). */
+  builtTotal: number;
 }
 
-/** 커밋들을 타입별로 집계(count 내림차순, 동률은 타입 알파벳). 순수·결정적. */
+/** 커밋들을 타입별로 집계(count 내림차순, 동률은 타입 알파벳) + "만든 것" 제목 추출. 순수·결정적. */
 export function summarizeSituation(commits: Commit[]): SituationSummary {
   const counts = new Map<string, number>();
+  const built: Array<{ type: string; subject: string }> = [];
   for (const c of commits) {
     const t = classifyCommitType(c.subject);
     counts.set(t, (counts.get(t) ?? 0) + 1);
+    if (BUILT_TYPES.has(t)) built.push({ type: t, subject: c.subject });
   }
   const total = commits.length;
   const byType = [...counts.entries()]
     .map(([type, count]) => ({ type, count, share: total > 0 ? count / total : 0 }))
     // 동률은 코드유닛 비교로 정렬 — localeCompare는 호스트 로케일 의존이라 비결정적.
     .sort((a, b) => b.count - a.count || (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));
-  return { byType, total };
+  return { byType, total, built: built.slice(0, MAX_BUILT), builtTotal: built.length };
 }

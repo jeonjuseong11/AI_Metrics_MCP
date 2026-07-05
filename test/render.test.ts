@@ -104,6 +104,11 @@ const sampleSituation: SituationSummary = {
     { type: "fix", count: 3, share: 0.6 },
     { type: "feat", count: 2, share: 0.4 },
   ],
+  built: [
+    { type: "feat", subject: "feat: 거울 내용화" },
+    { type: "fix", subject: "fix: 폴백 보강" },
+  ],
+  builtTotal: 5,
 };
 
 describe("renderAnalysis 작업 성격 섹션", () => {
@@ -116,6 +121,24 @@ describe("renderAnalysis 작업 성격 섹션", () => {
 
   it("situation이 없으면 '작업 성격' 섹션이 없다", () => {
     expect(renderAnalysis(analysisFixture())).not.toContain("## 작업 성격");
+  });
+});
+
+describe("renderAnalysis 무엇을 만들었나 섹션", () => {
+  it("built 커밋 제목 + 이 기간 비용을 넣는다", () => {
+    const out = renderAnalysis(analysisFixture(), undefined, undefined, sampleSituation);
+    expect(out).toContain("## 무엇을 만들었나 (이 기간 추정 $");
+    expect(out).toContain("- feat: 거울 내용화");
+    expect(out).toContain("- fix: 폴백 보강");
+    expect(out).toContain("… 외 3건"); // builtTotal 5 - built 2
+    expect(out).toContain("git 커밋 제목 기반");
+    // 만든 것 섹션이 작업 성격(타입 분포)보다 앞에 온다.
+    expect(out.indexOf("## 무엇을 만들었나")).toBeLessThan(out.indexOf("## 작업 성격"));
+  });
+
+  it("built가 없으면 '무엇을 만들었나' 섹션이 없다", () => {
+    const noBuilt: SituationSummary = { total: 2, byType: [{ type: "docs", count: 2, share: 1 }], built: [], builtTotal: 0 };
+    expect(renderAnalysis(analysisFixture(), undefined, undefined, noBuilt)).not.toContain("## 무엇을 만들었나");
   });
 });
 

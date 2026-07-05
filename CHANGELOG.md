@@ -4,6 +4,17 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.9.0] — 2026-07-05 · 무엇을 만들었나 (비용 ↔ 성과)
+
+"어떻게 썼나"(도구 빈도)를 넘어 **"이 비용으로 무엇을 만들었나"**(git 커밋 성과)를 보여준다.
+`summarizeSituation`이 feat/fix/refactor/perf 커밋 **제목**을 `built`로 추출 →
+`analyze --repo`에 `## 무엇을 만들었나 (이 기간 추정 $X)` 섹션(만든 것 나열 + 기간 비용).
+`aimm today --repo`도 오늘 만든 것을 🔨로. LLM 층(`--llm`)은 narrative에 `[만든것]` 사실줄
+추가(마스킹 경계 통과 후 성과를 산문화). **프라이버시 스코프**: 원시 커밋 제목은 로컬
+문서(analyze·today CLI)에만 — 거울(systemMessage)·초상(공유)엔 안 넣음. 테스트 235 → 238 그린.
+
+→ 상세: [docs/releases/v0.9.0-what-you-built.md](docs/releases/v0.9.0-what-you-built.md)
+
 ## [0.8.0] — 2026-07-05 · 내용 있는 거울 + `aimm today`
 
 거울 한 줄이 활동축(매일 비슷)에서 **영역축 share%**로 바뀌어 날짜를 구별한다:

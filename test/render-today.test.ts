@@ -6,6 +6,7 @@ import { renderToday } from "../src/core/render.js";
 import { runToday } from "../src/core/sessionStart.js";
 import type { UsageAnalysis } from "../src/core/analysis.js";
 import type { ContentSummary } from "../src/core/content.js";
+import type { Commit } from "../src/parse/git.js";
 
 function mk(sessions: number, costUsd: number, cs?: ContentSummary): UsageAnalysis {
   return {
@@ -56,6 +57,18 @@ describe("renderToday — 3-window 빈상태 매트릭스", () => {
   it("전부 0 → cold-start 한 줄", () => {
     expect(renderToday(mk(0, 0), mk(0, 0), mk(0, 0))).toBe("🪞 아직 기록 없음 — 다음 세션부터 쌓임");
   });
+
+  it("built(오늘 만든 것) 주면 🔨 커밋 제목을 오늘 헤더 뒤·3축 앞에 넣는다", () => {
+    const built = [
+      { type: "feat", subject: "feat: 거울 내용화" },
+      { type: "refactor", subject: "refactor: seam 추출" },
+    ];
+    const out = renderToday(mk(2, 3.0, cs), mk(0, 0), mk(15, 37.8), built);
+    expect(out).toContain("🔨 feat: 거울 내용화");
+    expect(out).toContain("🔨 refactor: seam 추출");
+    expect(out.indexOf("🔨 feat")).toBeGreaterThan(out.indexOf("오늘(지금까지)"));
+    expect(out.indexOf("🔨 refactor")).toBeLessThan(out.indexOf("- 활동:"));
+  });
 });
 
 // 어제(KST)·오늘(KST) startTime을 가진 assistant 세션 1줄.
@@ -94,5 +107,26 @@ describe("runToday — parse-once 통합(now 주입)", () => {
   it("세션 없음 → cold-start", async () => {
     const out = await runToday({ now, sessionFiles: [] });
     expect(out).toBe("🪞 아직 기록 없음 — 다음 세션부터 쌓임");
+  });
+
+  it("--repo(commitCollector 주입) → 오늘 만든 것(🔨) 표시", async () => {
+    const t = join(dir, "today2.jsonl");
+    writeFileSync(t, assistantLine("2026-06-28T02:00:00Z")); // 오늘 세션(오늘 섹션 렌더 조건)
+    const commit = (subject: string): Commit => ({
+      hash: "h", shortHash: "h", author: "u", timestamp: new Date("2026-06-28T02:00:00Z"), subject,
+    });
+    const commitCollector = async () => ({ commits: [commit("feat: 오늘 만든 것"), commit("docs: 무시됨")] });
+    const out = await runToday({ now, sessionFiles: [t], repoPath: "/repo", commitCollector });
+    expect(out).toContain("🔨 feat: 오늘 만든 것");
+    expect(out).not.toContain("docs: 무시됨"); // built 아님(feat/fix/refactor/perf만)
+  });
+
+  it("--repo인데 git 실패해도 현황은 그대로(throw 안 함)", async () => {
+    const t = join(dir, "today3.jsonl");
+    writeFileSync(t, assistantLine("2026-06-28T02:00:00Z"));
+    const commitCollector = async () => { throw new Error("git 없음"); };
+    const out = await runToday({ now, sessionFiles: [t], repoPath: "/repo", commitCollector });
+    expect(out).toContain("🪞 오늘(지금까지): 1세션");
+    expect(out).not.toContain("🔨");
   });
 });

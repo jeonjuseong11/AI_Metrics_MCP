@@ -18,7 +18,7 @@ import { toKstDateString } from "./core/day.js";
 import { createAnthropicSummarizer, createAnthropicNarrator } from "./llm/anthropic.js";
 import { runHook, type HookOptions } from "./core/hook.js";
 import { runInit, INIT_MODULE_URL, type InitIo } from "./core/init.js";
-import { parseSessionSource, shouldMirror, toHookOutput, runSessionStart, runToday, failureGlance } from "./core/sessionStart.js";
+import { parseSessionSource, shouldMirror, toHookOutput, runSessionStart, runToday, failureGlance, type TodayOptions } from "./core/sessionStart.js";
 import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
@@ -54,7 +54,7 @@ function usage(): void {
       "  aimm hook [옵션]                          초안을 ~/aimm/draft-<date>.md로 생성(SessionEnd hook용)",
       "    --date/--author/--repo  standup과 동일",
       "  aimm session-start                       SessionStart hook용 — 어제·이번주 거울 한 줄(stdin JSON)",
-      "  aimm today [--sessions <file>]            오늘·어제·이번주 현황(3축 풀뷰). 세션 밖 조회용",
+      "  aimm today [--repo <path>] [--sessions <file>]   오늘·어제·이번주 현황(3축). --repo면 오늘 만든 것(커밋)도",
       "  aimm init [--dry-run]                     SessionEnd hook·MCP 자동 등록(원커맨드 셋업)",
       "  aimm mcp                                  MCP stdio 서버 시작(Claude Code가 호출)",
       "",
@@ -155,11 +155,13 @@ async function cmdSessionStart(): Promise<number> {
   return 0;
 }
 
-/** `aimm today` — 세션 밖에서 오늘·어제·이번주 현황(3축 풀뷰)을 stdout으로. claude-only. */
+/** `aimm today` — 세션 밖에서 오늘·어제·이번주 현황(3축 풀뷰)을 stdout으로. --repo 시 오늘 만든 것. claude-only. */
 async function cmdToday(args: string[]): Promise<number> {
   const flags = parseFlags(args);
-  const opts: { sessionFiles?: string[] } = {};
+  const opts: TodayOptions = {};
   if (flags.sessions && flags.sessions.length > 0) opts.sessionFiles = flags.sessions.filter((s) => s !== "");
+  if (flags.repo?.[0]) opts.repoPath = flags.repo[0];
+  if (flags.author?.[0]) opts.author = flags.author[0];
   const out = await runToday(opts);
   process.stdout.write(out + "\n");
   return 0;

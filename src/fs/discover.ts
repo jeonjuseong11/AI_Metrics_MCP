@@ -5,7 +5,7 @@
  * 서브에이전트 로그(<dir>/subagents/*.jsonl)는 별도이므로 기본 제외한다.
  */
 
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -41,4 +41,21 @@ export async function discoverSessionFiles(projectsDir = defaultProjectsDir()): 
     }
   }
   return files;
+}
+
+/**
+ * mtime ≥ sinceMs 파일만 남기는 성근 프리필터(거울/today의 최근-창 수집).
+ * stat 실패한 파일은 **보존**한다 — 드롭하면 조용한 과소집계가 되므로 상한집합 유지가 안전.
+ */
+export async function filterRecentByMtime(files: string[], sinceMs: number): Promise<string[]> {
+  const kept: string[] = [];
+  for (const f of files) {
+    try {
+      const s = await stat(f);
+      if (s.mtimeMs >= sinceMs) kept.push(f);
+    } catch {
+      kept.push(f); // stat 실패 → 보존(과소집계 방지)
+    }
+  }
+  return kept;
 }

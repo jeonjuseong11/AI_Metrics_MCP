@@ -13,6 +13,13 @@ export interface CollectOptions {
   paths?: string[];
   /** 자동 발견 루트 오버라이드(테스트/커스텀 위치). */
   rootDir?: string;
+  /**
+   * 자동 발견 파일을 mtime ≥ 이 값(epoch ms)으로 좁히는 **성근 프리필터**.
+   * 거울/today의 startup 비용을 최근-창으로 상수화(전체 히스토리 O(n) 회피). 미지정=전체.
+   * 정확한 KST 날짜 필터는 여전히 analyze()가 인메모리로 하므로, 이 창이 분석창을 덮도록
+   * 슬랙을 두면 안전(상한집합). 명시 paths가 주어지면 무시(호출자가 고른 파일 존중).
+   */
+  sinceMtimeMs?: number;
 }
 
 /**

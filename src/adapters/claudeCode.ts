@@ -7,7 +7,7 @@
  * 기존 오케스트레이터 동작과 동일(이 불변식을 .length 가드로 바꾸지 말 것).
  */
 
-import { discoverSessionFiles } from "../fs/discover.js";
+import { discoverSessionFiles, filterRecentByMtime } from "../fs/discover.js";
 import { readSessionFiles } from "../fs/sessions.js";
 import type { ParseResult } from "../types.js";
 import type { CollectOptions, SourceAdapter } from "./types.js";
@@ -18,7 +18,11 @@ export const claudeCodeAdapter: SourceAdapter = {
   providesCost: true,
   // 인터페이스는 opts?(선택), 구현은 opts = {}(기본값) — 기본값 있는 필수 매개변수는 선택 계약을 구조적으로 만족(의도된 형태).
   async collect(opts: CollectOptions = {}): Promise<ParseResult> {
-    const files = opts.paths ?? (await discoverSessionFiles(opts.rootDir));
+    let files = opts.paths ?? (await discoverSessionFiles(opts.rootDir));
+    // 명시 paths는 존중(필터 안 함). 자동 발견 시에만 mtime 프리필터로 최근-창 좁힘.
+    if (opts.sinceMtimeMs !== undefined && opts.paths === undefined) {
+      files = await filterRecentByMtime(files, opts.sinceMtimeMs);
+    }
     return readSessionFiles(files);
   },
 };

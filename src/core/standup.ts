@@ -169,19 +169,41 @@ export interface AnalysisBuildResult {
   situation?: SituationSummary;
 }
 
-/** 개인 사용 분석을 빌드(세션 발견·수집 → analyze). CLI/MCP 공유 코어. */
-export async function buildAnalysis(opts: AnalysisBuildOptions = {}): Promise<AnalysisBuildResult> {
-  const warnings: string[] = [];
-  const adapters = opts.adapters ?? [claudeCodeAdapter];
-  // 기본은 claude-only(코어 결정성·테스트 footgun 방지). 멀티소스는 cli/mcp analyze가 ANALYSIS_ADAPTERS를 명시 주입.
+/** collectSessions 입력 — 어댑터에 넘길 공통 수집 옵션(소스-특화 해석은 어댑터). */
+export interface CollectCommon {
+  sessionFiles?: string[];
+  projectsDir?: string;
+  /** 자동 발견 파일을 mtime ≥ 이 값으로 좁히는 성근 프리필터(거울/today의 startup 상수화). 미지정=전체. */
+  sinceMtimeMs?: number;
+}
+
+export interface CollectResult {
+  sessions: NormalizedSession[];
+  warnings: string[];
+  sourceMeta: SourceMeta;
+}
+
+/**
+ * 어댑터들에서 세션을 **1회** 수집·소스태깅하고 sourceMeta(id→providesCost)를 만든다.
+ *
+ * analyze()가 이미 인메모리로 range 필터 + cost-unknown 격리를 하므로(analysis.ts), 거울/today는
+ * 이걸 1회 호출하고 analyze()를 범위별로 여러 번 부른다(parse-once — 디스크 파싱은 한 번).
+ * sourceMeta·source 태깅을 보존해 E5 격리(Cursor cost-unknown)가 유지된다.
+ */
+export async function collectSessions(
+  common: CollectCommon,
+  adapters: SourceAdapter[] = [claudeCodeAdapter],
+): Promise<CollectResult> {
   // sessionFiles:[](빈 배열, truthy)는 paths=[]로 보존돼 자동 발견을 건너뛴다 — .length 가드로 바꾸지 말 것.
   const collectOpts: CollectOptions = {};
-  if (opts.sessionFiles) collectOpts.paths = opts.sessionFiles;
-  if (opts.projectsDir) collectOpts.rootDir = opts.projectsDir;
+  if (common.sessionFiles) collectOpts.paths = common.sessionFiles;
+  if (common.projectsDir) collectOpts.rootDir = common.projectsDir;
+  if (common.sinceMtimeMs !== undefined) collectOpts.sinceMtimeMs = common.sinceMtimeMs;
+
   const collected = await Promise.all(
     adapters.map(async (a) => {
       try {
-        // 레거시 sessionFiles/projectsDir는 Claude Code 전용 — 타 소스엔 자기 기본 발견을 쓴다.
+        // 레거시 sessionFiles/projectsDir/sinceMtimeMs는 Claude Code 전용 — 타 소스엔 자기 기본 발견을 쓴다.
         const r = await a.collect(a.id === claudeCodeAdapter.id ? collectOpts : {});
         return { sessions: r.sessions.map((s) => ({ ...s, source: a.id })), warnings: r.warnings };
       } catch (e) {
@@ -192,22 +214,32 @@ export async function buildAnalysis(opts: AnalysisBuildOptions = {}): Promise<An
       }
     }),
   );
-  const parsed: ParseResult = {
-    sessions: collected.flatMap((c) => c.sessions),
-    warnings: collected.flatMap((c) => c.warnings),
-  };
-  for (const w of parsed.warnings) warnings.push(formatParseWarning(w));
 
-  const analyzeOpts: AnalyzeOptions = {};
-  if (opts.start) analyzeOpts.start = opts.start;
-  if (opts.end) analyzeOpts.end = opts.end;
+  const sessions = collected.flatMap((c) => c.sessions);
+  const warnings = collected.flatMap((c) => c.warnings).map(formatParseWarning);
   const sourceMeta: SourceMeta = new Map(
     adapters.map((a): [string, { displayName: string; providesCost: boolean }] => [
       a.id,
       { displayName: a.displayName, providesCost: a.providesCost },
     ]),
   );
-  const analysis = analyze(parsed.sessions, analyzeOpts, sourceMeta);
+  return { sessions, warnings, sourceMeta };
+}
+
+/** 개인 사용 분석을 빌드(세션 발견·수집 → analyze). CLI/MCP 공유 코어. */
+export async function buildAnalysis(opts: AnalysisBuildOptions = {}): Promise<AnalysisBuildResult> {
+  // 기본은 claude-only(코어 결정성·테스트 footgun 방지). 멀티소스는 cli/mcp analyze가 ANALYSIS_ADAPTERS를 명시 주입.
+  const adapters = opts.adapters ?? [claudeCodeAdapter];
+  const common: CollectCommon = {};
+  if (opts.sessionFiles) common.sessionFiles = opts.sessionFiles;
+  if (opts.projectsDir) common.projectsDir = opts.projectsDir;
+  const collected = await collectSessions(common, adapters);
+  const warnings: string[] = [...collected.warnings];
+
+  const analyzeOpts: AnalyzeOptions = {};
+  if (opts.start) analyzeOpts.start = opts.start;
+  if (opts.end) analyzeOpts.end = opts.end;
+  const analysis = analyze(collected.sessions, analyzeOpts, collected.sourceMeta);
 
   const result: AnalysisBuildResult = { analysis, warnings };
 

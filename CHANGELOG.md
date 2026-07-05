@@ -4,6 +4,18 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.8.0] — 2026-07-05 · 내용 있는 거울 + `aimm today`
+
+거울 한 줄이 활동축(매일 비슷)에서 **영역축 share%**로 바뀌어 날짜를 구별한다:
+`🪞 어제: 3세션 · $12 · TypeScript 60%·문서 25%`. 신규 **`aimm today`** — 세션 밖에서
+오늘(지금까지)·어제·이번주(오늘 포함)를 3축(활동·영역·명령) 풀뷰로 조회. analyze의 "무엇을 했나"
+블록을 `renderContentBlock`으로 추출해 재사용(DRY). **parse-once**: `collectSessions` seam으로
+세션을 1회 수집하고 `analyze()`를 범위별로 여러 번 호출(거울 startup 2→1 파싱). `CollectOptions.sinceMtimeMs`
+성근 프리필터로 startup 수집을 최근-창으로 상수화(O(전체 히스토리) 회피). claude-only(cost-known),
+프라이버시 불변식(닫힌 어휘·경로 0) 유지. 테스트 204 → 228 그린.
+
+→ 상세: [docs/releases/v0.8.0-content-mirror-today.md](docs/releases/v0.8.0-content-mirror-today.md)
+
 ## [0.7.0] — 2026-06-28 · SessionStart 거울 — 매일 열 때 한 줄 현황
 
 Claude Code를 열 때마다(startup · resume) SessionStart hook이 어제·이번주(최근7일) 비용-확인 사용 현황을

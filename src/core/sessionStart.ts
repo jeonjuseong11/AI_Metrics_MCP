@@ -6,10 +6,14 @@
  * 거울은 startup·resume에만(compact·clear 스킵 — 스팸 방지).
  */
 
-import { buildAnalysis } from "./standup.js";
-import { yesterdayKst, isoDatePlusDays, weekdayOf, WEEKDAY } from "./day.js";
-import { renderGlance } from "./render.js";
+import { collectSessions, type CollectCommon } from "./standup.js";
+import { analyze } from "./analysis.js";
+import { yesterdayKst, isoDatePlusDays, weekdayOf, WEEKDAY, toKstDateString } from "./day.js";
+import { renderGlance, renderToday } from "./render.js";
 import type { UsageAnalysis } from "./analysis.js";
+
+/** 거울/today 수집창 — 자동 발견 파일을 최근 N일 mtime로 좁혀 startup 비용을 상수화. 분석창(≤8일)+슬랙. */
+const COLLECT_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
 
 export interface SessionStartOptions {
   now?: Date;
@@ -35,21 +39,28 @@ function busiestWeekday(week: UsageAnalysis): string | undefined {
   return best >= 0 ? WEEKDAY[best] : undefined;
 }
 
-/** SessionStart 거울 한 줄. 코어 재사용(claude-only cost-known). 실패해도 throw 안 함. */
+/** collectSessions 공통 옵션 구성 — 명시 sessionFiles 없으면 mtime 수집창 캡(startup 상수화). */
+function windowCommon(now: Date, opts: SessionStartOptions): CollectCommon {
+  const common: CollectCommon = {};
+  if (opts.sessionFiles) common.sessionFiles = opts.sessionFiles;
+  if (opts.projectsDir) common.projectsDir = opts.projectsDir;
+  if (!opts.sessionFiles) common.sinceMtimeMs = now.getTime() - COLLECT_WINDOW_MS;
+  return common;
+}
+
+/**
+ * SessionStart 거울 한 줄. 코어 재사용(claude-only cost-known). 실패해도 throw 안 함.
+ * parse-once: 세션을 1회 수집하고 analyze()를 어제·이번주 두 범위로 부른다(디스크 파싱 1회).
+ */
 export async function runSessionStart(opts: SessionStartOptions = {}): Promise<string> {
   try {
     const now = opts.now ?? new Date();
     const yDate = yesterdayKst(now);
     const weekStart = isoDatePlusDays(yDate, -6); // 최근 7일(어제 종료)
 
-    const common: { sessionFiles?: string[]; projectsDir?: string } = {};
-    if (opts.sessionFiles) common.sessionFiles = opts.sessionFiles;
-    if (opts.projectsDir) common.projectsDir = opts.projectsDir;
-
-    const [{ analysis: yesterday }, { analysis: week }] = await Promise.all([
-      buildAnalysis({ ...common, start: yDate, end: yDate }),
-      buildAnalysis({ ...common, start: weekStart, end: yDate }),
-    ]);
+    const { sessions, sourceMeta } = await collectSessions(windowCommon(now, opts)); // claude-only(기본)
+    const yesterday = analyze(sessions, { start: yDate, end: yDate }, sourceMeta);
+    const week = analyze(sessions, { start: weekStart, end: yDate }, sourceMeta);
 
     const input: import("./render.js").GlanceInput = { yesterday, week };
     const wd = busiestWeekday(week);
@@ -58,6 +69,23 @@ export async function runSessionStart(opts: SessionStartOptions = {}): Promise<s
   } catch (err) {
     return failureGlance(err);
   }
+}
+
+/**
+ * `aimm today` 코어 — 오늘(지금까지) + 어제 + 이번주(오늘 포함) 풀뷰. claude-only.
+ * parse-once: 세션을 1회 수집하고 analyze()를 세 범위(오늘·어제·이번주)로 부른다.
+ */
+export async function runToday(opts: SessionStartOptions = {}): Promise<string> {
+  const now = opts.now ?? new Date();
+  const tDate = toKstDateString(now);
+  const yDate = yesterdayKst(now);
+  const weekStart = isoDatePlusDays(tDate, -6); // 최근 7일 ending 오늘(오늘 포함)
+
+  const { sessions, sourceMeta } = await collectSessions(windowCommon(now, opts)); // claude-only
+  const today = analyze(sessions, { start: tDate, end: tDate }, sourceMeta);
+  const yesterday = analyze(sessions, { start: yDate, end: yDate }, sourceMeta);
+  const week = analyze(sessions, { start: weekStart, end: tDate }, sourceMeta);
+  return renderToday(today, yesterday, week);
 }
 
 /** 실패 폴백 메시지 — 닫힌 어휘 유지: 경로 구분자 제거 + non-Error 안전. */

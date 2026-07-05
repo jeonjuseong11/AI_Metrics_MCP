@@ -10,7 +10,7 @@ import { PRICING_TABLE_VERSION } from "../pricing.js";
 import type { Commit } from "../parse/git.js";
 import type { UsageAnalysis } from "./analysis.js";
 import { labelCommitType, type SituationSummary } from "./situation.js";
-import { OTHER } from "./content.js";
+import { OTHER, type ContentSummary } from "./content.js";
 
 /** 모델 ID → 짧은 표시명. "claude-opus-4-8" → "Opus". */
 export function shortModelName(model: string): string {
@@ -155,14 +155,71 @@ export function renderGlance(input: GlanceInput): string {
     return `🪞 어제 기록 없음 · 이번주(최근7일) ${week.totals.sessions}세션 · ${wCost}`;
   }
 
-  const mix = (yesterday.contentSummary?.activity ?? [])
-    .slice(0, 3)
-    .map((a) => `${a.category}${(a.share * 100).toFixed(0)}%`)
-    .join("·");
+  // 영역축(다룬 파일 종류) share% — 활동축(구현·탐색)은 매일 비슷해 날짜를 구별 못 하므로 영역으로.
+  // areas에는 share 필드가 없어 count 합에서 계산(합 0이면 생략 — NaN 가드).
+  const areas = yesterday.contentSummary?.areas ?? [];
+  const areaTotal = areas.reduce((sum, a) => sum + a.count, 0);
+  const mix = areaTotal > 0
+    ? areas.slice(0, 2).map((a) => `${a.area} ${Math.round((a.count / areaTotal) * 100)}%`).join("·")
+    : "";
   const yPart = `🪞 어제: ${yesterday.totals.sessions}세션 · ${yCost}${mix ? ` · ${mix}` : ""}`;
   const busiest = weekBusiestWeekday ? ` · 가장 바쁜 요일 ${weekBusiestWeekday}` : "";
   const wPart = `이번주(최근7일): ${week.totals.sessions}세션 · ${wCost}${busiest}`;
   return `${yPart}  |  ${wPart}`;
+}
+
+/**
+ * "무엇을 했나" 3축 본문(활동·다룬 영역·명령·대화 깊이 + 정직성 캐비엇). 헤딩은 제외 —
+ * 호출부(analyze 렌더 / aimm today)가 자기 헤딩을 붙인다(DRY·정직성 단일 소스).
+ * content 없으면 [](빈 배열) — 호출부 가드와 이중 안전.
+ */
+export function renderContentBlock(cs: ContentSummary): string[] {
+  if (cs.sessionsWithContent === 0) return [];
+  const lines: string[] = [];
+  const act = cs.activity.map((x) => `${x.category} ${pct(x.share)}`).join(" · ");
+  if (act) lines.push(`- 활동: ${act}   (도구 호출 ${commaInt(cs.totalToolUses)}건 기준)`);
+  const TOP_AREAS = 6;
+  const shownAreas = cs.areas.slice(0, TOP_AREAS);
+  const extraAreas = cs.areas.length - shownAreas.length;
+  const areaStr = shownAreas.map((x) => `${x.area} ${x.count}`).join(" · ");
+  if (areaStr) lines.push(`- 다룬 영역: ${areaStr}${extraAreas > 0 ? ` · 외 ${extraAreas}개` : ""}`);
+  const cmdStr = cs.commands
+    .map((c) => (c.category === OTHER ? `기타 ${c.count}` : `${c.category}(${c.exampleVerbs.join("·")} ${c.count})`))
+    .join(" · ");
+  if (cmdStr) lines.push(`- 명령: ${cmdStr}`);
+  lines.push(`- 대화 깊이: 사용자 요청 ~${cs.userPrompts}건 · 내용 분석된 세션 ${cs.sessionsWithContent}건`);
+  lines.push("ℹ️ tool_use 빈도 기반 휴리스틱(무엇을 했나의 근사). Claude Code 세션만 분석(타 소스 내용 미파악).");
+  lines.push("   메인 세션의 서브에이전트 디스패치만 셈 — 서브에이전트 내부 작업은 제외(무거우면 총량 과소).");
+  return lines;
+}
+
+/**
+ * `aimm today` 풀뷰 — 오늘(지금까지) 3축 상세 + 어제 한 줄 + 이번주(오늘 포함) 요약.
+ * 거울(renderGlance)이 맛보기라면 이건 상세. 3-window 빈상태 매트릭스를 명시 처리.
+ * claude-only(cost-known)만 들어온다 — 호출부(runToday)가 claude 어댑터만 주입.
+ */
+export function renderToday(today: UsageAnalysis, yesterday: UsageAnalysis, week: UsageAnalysis): string {
+  if (today.totals.sessions === 0 && yesterday.totals.sessions === 0 && week.totals.sessions === 0) {
+    return "🪞 아직 기록 없음 — 다음 세션부터 쌓임";
+  }
+  const lines: string[] = [];
+  // 오늘(지금까지) — 3축 상세.
+  if (today.totals.sessions > 0) {
+    lines.push(`🪞 오늘(지금까지): ${today.totals.sessions}세션 · $${today.totals.costUsd.toFixed(2)}`);
+    const tc = today.contentSummary;
+    if (tc && tc.sessionsWithContent > 0) lines.push(...renderContentBlock(tc));
+  } else {
+    lines.push("🪞 오늘 아직 기록 없음 — 세션을 시작하면 쌓입니다");
+  }
+  // 어제 — 한 줄.
+  lines.push(
+    yesterday.totals.sessions > 0
+      ? `어제: ${yesterday.totals.sessions}세션 · $${yesterday.totals.costUsd.toFixed(2)}`
+      : "어제: 기록 없음",
+  );
+  // 이번주(최근7일, 오늘 포함) — 요약.
+  lines.push(`이번주(최근7일): ${week.totals.sessions}세션 · $${week.totals.costUsd.toFixed(2)}`);
+  return lines.join("\n");
 }
 
 // ── 개인 사용 분석 문서 렌더 ──────────────────────────────────────────────
@@ -302,24 +359,11 @@ export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: st
     lines.push("");
   }
 
-  // 무엇을 했나(세션 내용) — 결정적, content 있을 때만(Claude Code).
+  // 무엇을 했나(세션 내용) — 결정적, content 있을 때만(Claude Code). 본문은 renderContentBlock 공유.
   const cs = a.contentSummary;
   if (cs && cs.sessionsWithContent > 0) {
     lines.push("## 무엇을 했나 (세션 내용 기반)");
-    const act = cs.activity.map((x) => `${x.category} ${pct(x.share)}`).join(" · ");
-    if (act) lines.push(`- 활동: ${act}   (도구 호출 ${commaInt(cs.totalToolUses)}건 기준)`);
-    const TOP_AREAS = 6;
-    const shownAreas = cs.areas.slice(0, TOP_AREAS);
-    const extraAreas = cs.areas.length - shownAreas.length;
-    const areaStr = shownAreas.map((x) => `${x.area} ${x.count}`).join(" · ");
-    if (areaStr) lines.push(`- 다룬 영역: ${areaStr}${extraAreas > 0 ? ` · 외 ${extraAreas}개` : ""}`);
-    const cmdStr = cs.commands
-      .map((c) => (c.category === OTHER ? `기타 ${c.count}` : `${c.category}(${c.exampleVerbs.join("·")} ${c.count})`))
-      .join(" · ");
-    if (cmdStr) lines.push(`- 명령: ${cmdStr}`);
-    lines.push(`- 대화 깊이: 사용자 요청 ~${cs.userPrompts}건 · 내용 분석된 세션 ${cs.sessionsWithContent}건`);
-    lines.push("ℹ️ tool_use 빈도 기반 휴리스틱(무엇을 했나의 근사). Claude Code 세션만 분석(타 소스 내용 미파악).");
-    lines.push("   메인 세션의 서브에이전트 디스패치만 셈 — 서브에이전트 내부 작업은 제외(무거우면 총량 과소).");
+    lines.push(...renderContentBlock(cs));
     lines.push("");
   }
 

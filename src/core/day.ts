@@ -61,3 +61,17 @@ export function daysBetweenInclusive(start: string, end: string): number {
   const ms = Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`);
   return Math.round(ms / 86400000) + 1;
 }
+
+/** 요일 라벨(0=일 … 6=토). 로케일 비의존. */
+export const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** KST 날짜 문자열("YYYY-MM-DD")의 요일(0=일 … 6=토). */
+export function weekdayOf(dateStr: string): number {
+  return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+}
+
+/** KST 날짜에 n일 더한 날짜 문자열(UTC 기준 계산). */
+export function isoDatePlusDays(start: string, n: number): string {
+  const ms = Date.parse(`${start}T00:00:00Z`) + n * 86400000;
+  return new Date(ms).toISOString().slice(0, 10);
+}

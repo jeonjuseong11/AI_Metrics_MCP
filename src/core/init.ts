@@ -18,6 +18,12 @@ export function isAimmHook(command: string): boolean {
   return HOOK_MARKER.test(command);
 }
 
+/** SessionStart hook 마커 — SessionEnd(`… hook`)와 교차매칭 안 되게 `session-start` 서브커맨드로 판정. */
+const SESSION_START_MARKER = /(?:^|[\\/])cli\.js["']?\s+session-start(?:\s|$)/;
+export function isAimmSessionStartHook(command: string): boolean {
+  return SESSION_START_MARKER.test(command);
+}
+
 function deepCopy<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
@@ -54,6 +60,27 @@ export function mergeSessionEndHook(
   return { settings: s, action: "add" };
 }
 
+export function mergeSessionStartHook(
+  settings: unknown,
+  command: string,
+): { settings: Record<string, unknown>; action: "add" | "replace" | "noop" } {
+  const s = asObj(settings);
+  const hooks = (s.hooks = asObj(s.hooks));
+  const list = (Array.isArray(hooks.SessionStart) ? hooks.SessionStart : (hooks.SessionStart = [])) as HookGroup[];
+  for (const group of list) {
+    if (!group || !Array.isArray(group.hooks)) continue;
+    for (const h of group.hooks) {
+      if (h && h.type === "command" && typeof h.command === "string" && isAimmSessionStartHook(h.command)) {
+        if (h.command === command) return { settings: s, action: "noop" };
+        h.command = command;
+        return { settings: s, action: "replace" };
+      }
+    }
+  }
+  list.push({ hooks: [{ type: "command", command }] });
+  return { settings: s, action: "add" };
+}
+
 export function mergeMcpJson(json: unknown, absCliJs: string): Record<string, unknown> {
   const j = asObj(json);
   const servers = (j.mcpServers = asObj(j.mcpServers));
@@ -79,6 +106,7 @@ export interface InitResult {
   cliJs: string;
   settingsPath: string;
   hookAction: "add" | "replace" | "noop";
+  sessionStartAction: "add" | "replace" | "noop";
   mcpVia: "claude" | "mcp.json";
   mcpJsonPath: string;
   warnings: string[];
@@ -106,15 +134,20 @@ export function runInit(io: InitIo, moduleUrl: string, opts: { dryRun?: boolean 
   const settingsPath = join(io.homedir(), ".claude", "settings.json");
   const raw = io.readFile(settingsPath);
   const command = `node ${JSON.stringify(cliJs)} hook`;
-  const { settings: merged, action } = mergeSessionEndHook(raw ? JSON.parse(raw) : {}, command);
+  const ssCommand = `node ${JSON.stringify(cliJs)} session-start`;
+  const endMerge = mergeSessionEndHook(raw ? JSON.parse(raw) : {}, command);
+  const startMerge = mergeSessionStartHook(endMerge.settings, ssCommand);
+  const merged = startMerge.settings;
+  const action = endMerge.action;
+  const sessionStartAction = startMerge.action;
 
   const mcpJsonPath = join(io.cwd(), ".mcp.json");
 
   if (opts.dryRun) {
-    return { cliJs, settingsPath, hookAction: action, mcpVia: "claude", mcpJsonPath, warnings, backups };
+    return { cliJs, settingsPath, hookAction: action, sessionStartAction, mcpVia: "claude", mcpJsonPath, warnings, backups };
   }
 
-  if (action !== "noop") {
+  if (action !== "noop" || sessionStartAction !== "noop") {
     if (raw !== null) backups.push(io.backup(settingsPath));
     io.writeFile(settingsPath, JSON.stringify(merged, null, 2) + "\n");
   }
@@ -127,5 +160,5 @@ export function runInit(io: InitIo, moduleUrl: string, opts: { dryRun?: boolean 
     io.writeFile(mcpJsonPath, JSON.stringify(mergeMcpJson(existing ? JSON.parse(existing) : {}, cliJs), null, 2) + "\n");
   }
 
-  return { cliJs, settingsPath, hookAction: action, mcpVia, mcpJsonPath, warnings, backups };
+  return { cliJs, settingsPath, hookAction: action, sessionStartAction, mcpVia, mcpJsonPath, warnings, backups };
 }

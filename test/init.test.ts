@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { isAimmHook, mergeSessionEndHook, mergeMcpJson, runInit, type InitIo } from "../src/core/init.js";
+import { isAimmHook, mergeSessionEndHook, mergeMcpJson, runInit, isAimmSessionStartHook, mergeSessionStartHook, type InitIo } from "../src/core/init.js";
 
 // 플랫폼 비의존: 유효한 file URL(win32는 드라이브 문자 필요) + 구현과 동일한 path.join.
 const DIST_CORE = join(process.platform === "win32" ? "C:\\repo" : "/repo", "dist", "core");
@@ -116,5 +116,80 @@ describe("runInit", () => {
     runInit(io, MODULE_URL, {});
     const s = JSON.parse(io.files[SETTINGS]!);
     expect(s.hooks.SessionEnd).toHaveLength(1);
+  });
+
+  it("runInit registers BOTH SessionEnd and SessionStart hooks", () => {
+    let written = "";
+    const io = {
+      homedir: () => "/home/u",
+      cwd: () => "/repo",
+      now: () => "T",
+      readFile: () => null,
+      writeFile: (_p: string, c: string) => { written = c; },
+      backup: () => "/bak",
+      registerMcp: () => true,
+    };
+    const r = runInit(io, MODULE_URL);
+    expect(r.hookAction).toBe("add");
+    expect(r.sessionStartAction).toBe("add");
+    const parsed = JSON.parse(written);
+    const endCmds = parsed.hooks.SessionEnd[0].hooks[0].command;
+    const startCmds = parsed.hooks.SessionStart[0].hooks[0].command;
+    expect(endCmds).toContain("cli.js");
+    expect(endCmds).toContain("hook");
+    expect(startCmds).toContain("session-start");
+  });
+
+  it("runInit is idempotent across both hooks (second run noop)", () => {
+    let store: string | null = null;
+    const io = {
+      homedir: () => "/home/u", cwd: () => "/repo", now: () => "T",
+      readFile: () => store,
+      writeFile: (_p: string, c: string) => { store = c; },
+      backup: () => "/bak", registerMcp: () => true,
+    };
+    runInit(io, MODULE_URL);
+    const r2 = runInit(io, MODULE_URL);
+    expect(r2.hookAction).toBe("noop");
+    expect(r2.sessionStartAction).toBe("noop");
+  });
+});
+
+describe("SessionStart hook markers", () => {
+  const ssCmd = 'node "/x/dist/cli.js" session-start';
+  const endCmd = 'node "/x/dist/cli.js" hook';
+
+  it("markers do not cross-match", () => {
+    expect(isAimmSessionStartHook(ssCmd)).toBe(true);
+    expect(isAimmSessionStartHook(endCmd)).toBe(false);
+    // reverse direction: isAimmHook must not match session-start command
+    expect(isAimmHook(ssCmd)).toBe(false);
+  });
+
+  it("merge adds SessionStart group when absent", () => {
+    const { settings, action } = mergeSessionStartHook({}, ssCmd);
+    expect(action).toBe("add");
+    const list = (settings.hooks as any).SessionStart;
+    expect(list[0].hooks[0].command).toBe(ssCmd);
+  });
+
+  it("merge is idempotent (noop on same command)", () => {
+    const first = mergeSessionStartHook({}, ssCmd).settings;
+    const { action } = mergeSessionStartHook(first, ssCmd);
+    expect(action).toBe("noop");
+  });
+
+  it("merge replaces when path changed", () => {
+    const first = mergeSessionStartHook({}, 'node "/old/cli.js" session-start').settings;
+    const { settings, action } = mergeSessionStartHook(first, ssCmd);
+    expect(action).toBe("replace");
+    expect((settings.hooks as any).SessionStart[0].hooks[0].command).toBe(ssCmd);
+  });
+
+  it("does not touch existing SessionEnd entries", () => {
+    const withEnd = { hooks: { SessionEnd: [{ hooks: [{ type: "command", command: endCmd }] }] } };
+    const { settings } = mergeSessionStartHook(withEnd, ssCmd);
+    expect((settings.hooks as any).SessionEnd[0].hooks[0].command).toBe(endCmd);
+    expect((settings.hooks as any).SessionStart[0].hooks[0].command).toBe(ssCmd);
   });
 });

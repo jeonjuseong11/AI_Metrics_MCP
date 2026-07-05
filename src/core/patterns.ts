@@ -8,25 +8,12 @@
 import type { UsageAnalysis } from "./analysis.js";
 import type { Insight } from "./insight.js";
 import { formatDuration } from "./render.js";
-import { daysBetweenInclusive } from "./day.js";
-
-const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
-
-/** KST 날짜 문자열의 요일(0=일 … 6=토). */
-function weekdayOf(dateStr: string): number {
-  return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
-}
+import { daysBetweenInclusive, WEEKDAY, weekdayOf, isoDatePlusDays } from "./day.js";
 
 /** 기간 일수(inclusive). range 비면 활동일 수. */
 function periodDays(a: UsageAnalysis): number {
   if (a.range.start && a.range.end) return daysBetweenInclusive(a.range.start, a.range.end);
   return a.byDay.length;
-}
-
-/** KST 날짜에 n일 더한 날짜 문자열(UTC 기준 계산). */
-function isoDatePlusDays(start: string, n: number): string {
-  const ms = Date.parse(`${start}T00:00:00Z`) + n * 86400000;
-  return new Date(ms).toISOString().slice(0, 10);
 }
 
 /** 중앙값(짝수면 두 중앙 평균). 빈 배열 0. */

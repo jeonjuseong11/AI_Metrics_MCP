@@ -18,6 +18,7 @@ import { toKstDateString } from "./core/day.js";
 import { createAnthropicSummarizer, createAnthropicNarrator } from "./llm/anthropic.js";
 import { runHook, type HookOptions } from "./core/hook.js";
 import { runInit, INIT_MODULE_URL, type InitIo } from "./core/init.js";
+import { parseSessionSource, shouldMirror, toHookOutput, runSessionStart, failureGlance } from "./core/sessionStart.js";
 import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
@@ -52,6 +53,7 @@ function usage(): void {
       "    --sessions <file>   세션 파일 명시(반복 가능)",
       "  aimm hook [옵션]                          초안을 ~/aimm/draft-<date>.md로 생성(SessionEnd hook용)",
       "    --date/--author/--repo  standup과 동일",
+      "  aimm session-start                       SessionStart hook용 — 어제·이번주 거울 한 줄(stdin JSON)",
       "  aimm init [--dry-run]                     SessionEnd hook·MCP 자동 등록(원커맨드 셋업)",
       "  aimm mcp                                  MCP stdio 서버 시작(Claude Code가 호출)",
       "",
@@ -124,6 +126,32 @@ async function cmdHook(args: string[]): Promise<number> {
   const r = await runHook(opts);
   process.stderr.write(`${r.ok ? "초안 생성됨" : "초안 생성 실패(에러 노트 기록)"}: ${r.path}\n`);
   return r.ok ? 0 : 1;
+}
+
+/** stdin 전체를 읽는다(SessionStart hook이 JSON을 stdin으로 넘김). */
+function readStdin(): Promise<string> {
+  return new Promise((resolve) => {
+    let raw = "";
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", (c) => (raw += c));
+    process.stdin.on("end", () => resolve(raw));
+    process.stdin.on("error", () => resolve(raw));
+  });
+}
+
+/** SessionStart hook 진입점. 거울 한 줄을 top-level systemMessage로 낸다. 항상 exit 0. */
+async function cmdSessionStart(): Promise<number> {
+  try {
+    const raw = await readStdin();
+    const source = parseSessionSource(raw);
+    if (!shouldMirror(source)) return 0; // compact·clear·기타 스킵(무출력)
+    const line = await runSessionStart();
+    process.stdout.write(toHookOutput(line));
+  } catch (err) {
+    // 절대 세션을 깨지 않는다 — systemMessage로 실패를 알리고 exit 0.
+    process.stdout.write(toHookOutput(failureGlance(err)));
+  }
+  return 0;
 }
 
 async function cmdMcp(): Promise<number> {
@@ -233,6 +261,7 @@ async function cmdInit(args: string[]): Promise<number> {
   out.push(dryRun ? "[dry-run] aimm init — 변경 예정:" : "aimm init 완료:");
   out.push(`  CLI: ${r.cliJs}`);
   out.push(`  SessionEnd hook: ${r.hookAction} → ${r.settingsPath}`);
+  out.push(`  SessionStart hook: ${r.sessionStartAction} → ${r.settingsPath}`);
   out.push(`  MCP 등록: ${r.mcpVia === "claude" ? "claude mcp add --scope user" : `.mcp.json (${r.mcpJsonPath})`}`);
   if (r.mcpVia === "mcp.json") {
     out.push(`  ↳ 전역 등록을 원하면: claude mcp add aimm --scope user -- node ${JSON.stringify(r.cliJs)} mcp`);
@@ -277,6 +306,8 @@ async function main(): Promise<number> {
       return cmdPortrait(rest);
     case "hook":
       return cmdHook(rest);
+    case "session-start":
+      return cmdSessionStart();
     case "init":
       return cmdInit(rest);
     case "mcp":

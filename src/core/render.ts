@@ -135,6 +135,36 @@ function footer(opts: DraftOptions): string {
   return lines.join("\n");
 }
 
+// ── 한 줄 거울(SessionStart) ────────────────────────────────────────────────
+
+export interface GlanceInput {
+  yesterday: UsageAnalysis;
+  week: UsageAnalysis;
+  /** 이번주 가장 바쁜 요일 라벨(예 "화"). 없으면 생략. */
+  weekBusiestWeekday?: string;
+}
+
+/** 한 줄 거울(SessionStart 표출). 닫힌 어휘·숫자만. */
+export function renderGlance(input: GlanceInput): string {
+  const { yesterday, week, weekBusiestWeekday } = input;
+  const yCost = `$${yesterday.totals.costUsd.toFixed(2)}`;
+  const wCost = `$${week.totals.costUsd.toFixed(2)}`;
+
+  if (yesterday.totals.sessions === 0) {
+    if (week.totals.sessions === 0) return "🪞 아직 기록 없음 — 다음 세션부터 쌓임";
+    return `🪞 어제 기록 없음 · 이번주(최근7일) ${week.totals.sessions}세션 · ${wCost}`;
+  }
+
+  const mix = (yesterday.contentSummary?.activity ?? [])
+    .slice(0, 3)
+    .map((a) => `${a.category}${(a.share * 100).toFixed(0)}%`)
+    .join("·");
+  const yPart = `🪞 어제: ${yesterday.totals.sessions}세션 · ${yCost}${mix ? ` · ${mix}` : ""}`;
+  const busiest = weekBusiestWeekday ? ` · 가장 바쁜 요일 ${weekBusiestWeekday}` : "";
+  const wPart = `이번주(최근7일): ${week.totals.sessions}세션 · ${wCost}${busiest}`;
+  return `${yPart}  |  ${wPart}`;
+}
+
 // ── 개인 사용 분석 문서 렌더 ──────────────────────────────────────────────
 
 /** 비율(0~1)을 너비 width의 막대로. */

@@ -303,7 +303,7 @@ export function renderAnalysis(
     for (const t of a.byTool ?? []) {
       lines.push(`- ${t.displayName}: 세션 ${t.sessions} · ${t.costKnown ? `약 $${t.costUsd.toFixed(2)}` : "비용 미상"}`);
     }
-    lines.push("_세션 정의는 도구마다 다릅니다: Claude Code=세션 로그, Cursor=대화(composer)._");
+    lines.push("_세션 정의는 도구마다 다릅니다(Claude=세션 로그 · Cursor/Copilot=대화 · Codex=rollout · Gemini=작업). 비용 미상 소스는 시간·빈도만._");
     return lines.join("\n");
   }
 
@@ -374,7 +374,7 @@ export function renderAnalysis(
     for (const t of tools) {
       lines.push(`- ${t.displayName}: 세션 ${t.sessions} · ${t.costKnown ? `약 $${t.costUsd.toFixed(2)}` : "비용 미상"}`);
     }
-    lines.push("_세션 정의는 도구마다 다릅니다: Claude Code=세션 로그, Cursor=대화(composer)._");
+    lines.push("_세션 정의는 도구마다 다릅니다(Claude=세션 로그 · Cursor/Copilot=대화 · Codex=rollout · Gemini=작업). 비용 미상 소스는 시간·빈도만._");
     lines.push("");
   }
 

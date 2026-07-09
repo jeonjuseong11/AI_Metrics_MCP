@@ -4,6 +4,13 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.15.0] — 2026-07-09 · 커밋 × AI 세션 시간 상관 (비용 귀속 아님)
+
+"이 커밋 즈음 AI 세션이 있었나"를 **시간 겹침**으로. **커밋별 비용 귀속은 안 함**(v0.9.0의
+의도적 결정 유지 — 거짓 정밀도·척추 위반 회피). 신규 `core/correlate.ts`(커밋 시각이 세션
+`[start,end]±30분` 안 비율). `analyze --repo`·MCP `retro`에 `## 커밋 × AI 세션 (시간 상관)`
+섹션 + 비용 귀속·인과 아님 라벨. 상세: [v0.15.0](docs/releases/v0.15.0-commit-session-correlation.md). 262 그린.
+
 ## [0.14.0] — 2026-07-09 · Cursor 내용 다이제스트 + 내용 격리 해제
 
 Cursor의 **요청(user 프롬프트)**이 "무엇을 했나" 롤업에 포함. 버블 `type===1` 텍스트 →

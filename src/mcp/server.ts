@@ -82,8 +82,8 @@ export function createMcpServer(): McpServer {
         opts.end = w.end;
       }
       if (args.repo) opts.repoPath = args.repo;
-      const { analysis, situation } = await buildAnalysis(opts);
-      return { content: [{ type: "text", text: renderAnalysis(analysis, args.author, undefined, situation, "AI 회고") }] };
+      const { analysis, situation, correlation } = await buildAnalysis(opts);
+      return { content: [{ type: "text", text: renderAnalysis(analysis, args.author, undefined, situation, "AI 회고", correlation) }] };
     },
   );
 

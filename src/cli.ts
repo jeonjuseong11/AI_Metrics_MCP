@@ -14,11 +14,12 @@ import { renderMetricsBlock } from "./core/render.js";
 import { buildStandup, buildAnalysis, ANALYSIS_ADAPTERS, type StandupOptions, type AnalysisBuildOptions } from "./core/standup.js";
 import { renderAnalysis } from "./core/render.js";
 import { renderPortrait, type PortraitOptions } from "./core/portrait.js";
-import { toKstDateString } from "./core/day.js";
+import { toKstDateString, isoDatePlusDays } from "./core/day.js";
 import { createAnthropicSummarizer, createAnthropicNarrator, createAnthropicBuiltSummarizer } from "./llm/anthropic.js";
 import { discoverSessionFiles } from "./fs/discover.js";
 import { collectIntents, prepareIntentSend } from "./core/intent.js";
 import { runHook, type HookOptions } from "./core/hook.js";
+import { runRetroWrite, type RetroWriteOptions } from "./core/retro.js";
 import { runInit, INIT_MODULE_URL, type InitIo } from "./core/init.js";
 import { parseSessionSource, shouldMirror, toHookOutput, runSessionStart, runToday, failureGlance, type TodayOptions } from "./core/sessionStart.js";
 import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from "node:fs";
@@ -49,6 +50,10 @@ function usage(): void {
       "    --repo <path>       작업 성격(커밋 타입)을 분류할 저장소 경로",
       "    --llm               주간 사용을 LLM으로 서술. 기본은 드라이(보낼 수치·가림 건수만)",
       "    --send              실제로 LLM에 전송(ANTHROPIC_API_KEY 필요). --llm과 함께",
+      "  aimm retro [옵션]                         회고록 = 사용 패턴 + 무엇을 만들었나 한 문서(기간 기본 최근 1주)",
+      "    --period week|month  기간 프리셋(--start/--end 없을 때만; 기본 week)",
+      "    --write [--force]    회고를 ~/aimm/retro-<end>.md로 저장(주기 자동화용, 주간 멱등)",
+      "    --start/--end/--repo/--author/--llm/--send  analyze와 동일",
       "  aimm portrait [옵션]                      공유용 AI craft 초상(텍스트+표) 생성",
       "    --start YYYY-MM-DD  시작 KST 날짜(기본: 데이터 전체)",
       "    --end YYYY-MM-DD    끝 KST 날짜",
@@ -77,8 +82,11 @@ function parseFlags(args: string[]) {
       sessions: { type: "string", multiple: true },
       start: { type: "string" },
       end: { type: "string" },
+      period: { type: "string" },
       llm: { type: "boolean" },
       send: { type: "boolean" },
+      write: { type: "boolean" },
+      force: { type: "boolean" },
       "dry-run": { type: "boolean" },
     },
   });
@@ -182,29 +190,11 @@ async function cmdMcp(): Promise<number> {
   return new Promise<number>(() => {});
 }
 
-async function cmdAnalyze(args: string[]): Promise<number> {
-  const flags = parseFlags(args);
-  const opts: AnalysisBuildOptions = {};
-  if (flags.start) opts.start = flags.start;
-  if (flags.end) opts.end = flags.end;
-  // --sessions 존재 시(빈 배열이라도) 설정 → 자동 발견 스킵. 부재 시 undefined → 자동 발견.
-  const sessions = flags.sessions?.filter((s) => s !== "");
-  if (sessions) opts.sessionFiles = sessions;
-  if (flags.repo) opts.repoPath = flags.repo;
-  const author = flags.author;
-  if (author) opts.author = author;
-
-  const useLlm = flags.llm === true;
-  const send = flags.send === true;
-  if (useLlm) {
-    opts.useLlm = true;
-    if (send) opts.summarizer = createAnthropicNarrator();
-    else opts.dryRunLlm = true;
-  }
-
-  opts.adapters = ANALYSIS_ADAPTERS; // analyze는 멀티소스(Claude Code + Cursor)
+/** analyze/retro 공통 몸통 — buildAnalysis + '무엇을 만들었나'(내용) + preview/warnings. heading만 다름. */
+async function emitAnalysis(opts: AnalysisBuildOptions, useLlm: boolean, send: boolean, heading: string): Promise<number> {
+  opts.adapters = ANALYSIS_ADAPTERS; // 멀티소스(Claude Code + Cursor + Codex)
   const { analysis, warnings, narrative, preview, situation } = await buildAnalysis(opts);
-  process.stdout.write(renderAnalysis(analysis, author, narrative, situation) + "\n");
+  process.stdout.write(renderAnalysis(analysis, opts.author, narrative, situation, heading) + "\n");
 
   // 무엇을 만들었나(내용 기반) — --llm 시. 원시 프롬프트+파일 경로 → 마스킹(fail-closed) → LLM 성과 서술.
   // claude 세션 원시 텍스트만 다룸(이 경로에서만). --send 아니면 dry-run으로 보낼 내용만 보여줌.
@@ -249,6 +239,65 @@ async function cmdAnalyze(args: string[]): Promise<number> {
     for (const w of warnings) process.stderr.write(`  - ${w}\n`);
   }
   return 0;
+}
+
+/** 공통: 플래그 → AnalysisBuildOptions + useLlm/send. */
+function analyzeOptsFromFlags(flags: ReturnType<typeof parseFlags>): { opts: AnalysisBuildOptions; useLlm: boolean; send: boolean } {
+  const opts: AnalysisBuildOptions = {};
+  if (flags.start) opts.start = flags.start;
+  if (flags.end) opts.end = flags.end;
+  const sessions = flags.sessions?.filter((s) => s !== "");
+  if (sessions) opts.sessionFiles = sessions;
+  if (flags.repo) opts.repoPath = flags.repo;
+  if (flags.author) opts.author = flags.author;
+  const useLlm = flags.llm === true;
+  const send = flags.send === true;
+  if (useLlm) {
+    opts.useLlm = true;
+    if (send) opts.summarizer = createAnthropicNarrator();
+    else opts.dryRunLlm = true;
+  }
+  return { opts, useLlm, send };
+}
+
+async function cmdAnalyze(args: string[]): Promise<number> {
+  const { opts, useLlm, send } = analyzeOptsFromFlags(parseFlags(args));
+  return emitAnalysis(opts, useLlm, send, "AI 사용 분석");
+}
+
+/** period(week=최근7일·month=최근30일) → KST 창. 명시 --start/--end가 있으면 그걸 우선. */
+function retroWindow(period: string | undefined): { start: string; end: string } {
+  const end = toKstDateString(new Date());
+  const days = period === "month" ? 29 : 6; // 기본 week
+  return { start: isoDatePlusDays(end, -days), end };
+}
+
+/** aimm retro — 사용 패턴 + 무엇을 만들었나를 한 회고 문서로. 기간 기본=최근 1주. */
+async function cmdRetro(args: string[]): Promise<number> {
+  const flags = parseFlags(args);
+  const { opts, useLlm, send } = analyzeOptsFromFlags(flags);
+  // 기간 미지정 시 회고 창(week/month)을 기본으로 채운다. 명시 --start/--end는 존중.
+  if (!opts.start && !opts.end) {
+    const w = retroWindow(flags.period);
+    opts.start = w.start;
+    opts.end = w.end;
+  }
+
+  // --write: 회고를 파일로(주기 자동화용, 결정적·주간 멱등). 스케줄러가 호출.
+  if (flags.write === true) {
+    const w: RetroWriteOptions = { start: opts.start!, end: opts.end! };
+    if (opts.author) w.author = opts.author;
+    if (opts.repoPath) w.repoPath = opts.repoPath;
+    if (opts.sessionFiles) w.sessionFiles = opts.sessionFiles;
+    if (flags.force === true) w.force = true;
+    const r = await runRetroWrite(w);
+    process.stderr.write(
+      `${r.written ? (r.ok ? "회고 생성됨" : "회고 생성 실패(에러 노트 기록)") : "이미 있음(skip, --force로 덮어쓰기)"}: ${r.path}\n`,
+    );
+    return r.ok ? 0 : 1;
+  }
+
+  return emitAnalysis(opts, useLlm, send, "AI 회고");
 }
 
 async function cmdPortrait(args: string[]): Promise<number> {
@@ -354,6 +403,8 @@ async function main(): Promise<number> {
       return cmdStandup(rest);
     case "analyze":
       return cmdAnalyze(rest);
+    case "retro":
+      return cmdRetro(rest);
     case "portrait":
       return cmdPortrait(rest);
     case "hook":

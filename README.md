@@ -147,6 +147,32 @@ ANTHROPIC_API_KEY=sk-ant-... npx tsx src/cli.ts analyze --start 2026-06-08 --end
 
 > MCP `analyze` 도구는 결정적 문서만 반환한다(외부 전송 없음) — 산문은 CLI `--send` 전용.
 
+### 회고록 (retro)
+
+사용 패턴 + "무엇을 만들었나"를 **한 회고 문서**로. 기간 기본 = 최근 1주.
+
+```bash
+npx tsx src/cli.ts retro --period week            # 또는 --period month
+npx tsx src/cli.ts retro --repo /path --llm --send  # 무엇을 만들었나(내용) 프로즈까지
+```
+
+`analyze`와 같은 엔진(멀티소스·전송 경계)에 회고 프레이밍만 얹은 것이다. `--repo`면
+작업 성격·만든 것까지, `--llm --send`면 산문 회고.
+
+**주간 자동 생성** — `--write`가 `~/aimm/retro-<end>.md`에 저장한다(결정적·주간 멱등:
+같은 창 파일 있으면 skip, `--force`로 덮어씀). OS 스케줄러가 주 1회 호출하면 회고가 쌓인다:
+
+```bash
+# Windows Task Scheduler — 매주 월 09:00
+schtasks /create /tn AIMM-Retro /sc weekly /d MON /st 09:00 ^
+  /tr "node C:\path\to\AI_Metrics_MCP\dist\cli.js retro --period week --write"
+
+# cron (mac/linux) — 매주 월 09:00
+0 9 * * 1  node /path/to/AI_Metrics_MCP/dist/cli.js retro --period week --write
+```
+
+스케줄 경로는 **결정적**(LLM·키·전송 0). 실패해도 같은 파일에 에러 노트를 남겨 조용히 죽지 않는다.
+
 ### Claude Code 연동 (hook · MCP)
 
 **원커맨드:** `node dist/cli.js init` 한 번이면 아래 ①②를 자동 등록한다 — `~/.claude/settings.json`에

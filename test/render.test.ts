@@ -96,6 +96,11 @@ describe("renderAnalysis 산문 섹션", () => {
     const out = renderAnalysis(analysisFixture());
     expect(out).not.toContain("## 한 주 돌아보기");
   });
+
+  it("heading을 주면 제목을 바꾼다(retro='AI 회고'), 기본은 'AI 사용 분석'", () => {
+    expect(renderAnalysis(analysisFixture())).toContain("# AI 사용 분석");
+    expect(renderAnalysis(analysisFixture(), undefined, undefined, undefined, "AI 회고")).toContain("# AI 회고");
+  });
 });
 
 const sampleSituation: SituationSummary = {

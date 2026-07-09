@@ -274,10 +274,16 @@ function hourSparkline(byHour: number[]): string {
 /**
  * 개인 AI 사용 분석 문서를 렌더한다(서술 자료, 평가 아님).
  */
-export function renderAnalysis(a: UsageAnalysis, author?: string, narrative?: string, situation?: SituationSummary): string {
+export function renderAnalysis(
+  a: UsageAnalysis,
+  author?: string,
+  narrative?: string,
+  situation?: SituationSummary,
+  heading = "AI 사용 분석",
+): string {
   const who = author ? ` — ${author}` : "";
   const lines: string[] = [];
-  lines.push(`# AI 사용 분석${who}`);
+  lines.push(`# ${heading}${who}`);
   lines.push(`기간: ${a.range.start} ~ ${a.range.end} (KST)`);
   lines.push("");
 

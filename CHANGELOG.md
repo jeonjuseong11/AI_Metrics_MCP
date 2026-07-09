@@ -4,6 +4,14 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.12.0] — 2026-07-09 · 회고록(retro) + 주간 자동 생성
+
+사용 패턴 + "무엇을 만들었나"를 한 회고 문서로. 신규 `aimm retro`(기간 기본 최근 1주,
+`--period month`)는 `analyze`와 동일 엔진(멀티소스·전송 경계)에 회고 프레이밍만 얹음
+(`emitAnalysis` 공통화, dup 아님). `retro --write`는 `~/aimm/retro-<end>.md`에 저장 —
+결정적·주간 멱등(같은 창 skip, `--force` 덮어씀)·실패 시 에러 노트. OS 스케줄러 한 줄로
+주간 자동(README). `renderAnalysis`에 heading 파라미터 추가. 상세: [v0.12.0](docs/releases/v0.12.0-retro.md). 257 그린.
+
 ## [0.11.0] — 2026-07-09 · Codex CLI 어댑터 — 진짜 멀티-LLM 비용 비교 (Phase 2)
 
 Claude Code에 이어 **Codex CLI**를 소스로 추가. `~/.codex/sessions/**/rollout-*.jsonl`에서

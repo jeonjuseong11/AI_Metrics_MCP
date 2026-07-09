@@ -40,7 +40,7 @@ describe("aggregate", () => {
 
   it("알 수 없는 모델은 비용 0 + unknownModel 플래그", () => {
     const s = session("s1", [
-      { model: "gpt-4o", ts: "2026-06-02T10:00:00Z", tokens: tokens({ input: 1_000_000 }) },
+      { model: "llama-3-70b", ts: "2026-06-02T10:00:00Z", tokens: tokens({ input: 1_000_000 }) },
     ]);
     const agg = aggregate([s]);
     expect(agg.hasUnknownModel).toBe(true);

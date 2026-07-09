@@ -26,6 +26,8 @@ const FAMILY_RATES: Record<string, ModelRate> = {
   opus: { input: 15, output: 75 },
   sonnet: { input: 3, output: 15 },
   haiku: { input: 0.8, output: 4 },
+  // GPT-5 class (Codex). 추정치 — 실제 계약 단가로 교체 가능. cacheRead는 정가 10%(공통 배수).
+  gpt: { input: 1.25, output: 10 },
 };
 
 const CACHE_READ_MULTIPLIER = 0.1;

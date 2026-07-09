@@ -16,7 +16,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync as SqliteDatabase } from "node:sqlite";
-import type { NormalizedMessage, NormalizedSession, ParseResult, ParseWarning } from "../types.js";
+import type { NormalizedMessage, NormalizedSession, ParseResult, ParseWarning, SessionContentDigest } from "../types.js";
 import type { CollectOptions, SourceAdapter } from "./types.js";
 
 // node:sqlite는 신규 내장이라 번들러(vitest의 vite)가 `node:`를 떼고 "sqlite"로 잘못 resolve한다.
@@ -51,6 +51,8 @@ export const cursorAdapter: SourceAdapter = {
     const warnings: ParseWarning[] = [];
     const dbPaths = opts.paths ?? [join(opts.rootDir ?? defaultCursorGlobalStorage(), "state.vscdb")];
     const byComposer = new Map<string, NormalizedMessage[]>();
+    // 내용 다이제스트: type 1 = user 버블 → userPrompts. 도구·파일은 Cursor 버블 구조가 노이즈라 후속(현재 요청 건수만).
+    const userPromptsByComposer = new Map<string, number>();
 
     for (const dbPath of dbPaths) {
       if (!existsSync(dbPath)) continue; // 부재 = 조용한 no-op(경고 없음)
@@ -73,12 +75,16 @@ export const cursorAdapter: SourceAdapter = {
             continue;
           }
           const composerId = parts[1];
-          let obj: { createdAt?: unknown };
+          let obj: { createdAt?: unknown; type?: unknown; text?: unknown };
           try {
             obj = JSON.parse(decodeValue(row.value));
           } catch {
             warnings.push({ line: 0, reason: `Cursor 버블 JSON 파싱 실패 — skip(${composerId})` });
             continue;
+          }
+          // 내용: user 버블(type 1)의 텍스트 → userPrompts. 타임스탬프 가드와 독립(메트릭과 분리).
+          if (obj.type === 1 && typeof obj.text === "string" && obj.text.trim() !== "") {
+            userPromptsByComposer.set(composerId, (userPromptsByComposer.get(composerId) ?? 0) + 1);
           }
           const ca = obj.createdAt;
           const ts = typeof ca === "string" || typeof ca === "number" ? new Date(ca) : null;
@@ -102,15 +108,24 @@ export const cursorAdapter: SourceAdapter = {
     }
 
     const sessions: NormalizedSession[] = [];
-    for (const [composerId, messages] of byComposer) {
+    // user 프롬프트만 있고 유효 타임스탬프 메시지가 없는 대화도 내용 세션으로 포함(요청 건수 보존).
+    const composerIds = new Set<string>([...byComposer.keys(), ...userPromptsByComposer.keys()]);
+    for (const composerId of composerIds) {
+      const messages = byComposer.get(composerId) ?? [];
       const times = messages.map((m) => m.timestamp.getTime());
-      sessions.push({
+      const session: NormalizedSession = {
         sessionId: composerId,
         projectPath: undefined,
         messages,
         startTime: times.length ? new Date(Math.min(...times)) : undefined,
         endTime: times.length ? new Date(Math.max(...times)) : undefined,
-      });
+      };
+      const up = userPromptsByComposer.get(composerId) ?? 0;
+      if (up > 0) {
+        const content: SessionContentDigest = { userPrompts: up, toolUses: {}, fileExts: {}, commandVerbs: {} };
+        session.content = content;
+      }
+      sessions.push(session);
     }
     return { sessions, warnings };
   },

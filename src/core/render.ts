@@ -190,7 +190,7 @@ export function renderContentBlock(cs: ContentSummary): string[] {
     .join(" · ");
   if (cmdStr) lines.push(`- 명령: ${cmdStr}`);
   lines.push(`- 대화 깊이: 사용자 요청 ~${cs.userPrompts}건 · 내용 분석된 세션 ${cs.sessionsWithContent}건`);
-  lines.push("ℹ️ tool_use 빈도 기반 휴리스틱(무엇을 했나의 근사). Claude Code 세션만 분석(타 소스 내용 미파악).");
+  lines.push("ℹ️ tool_use 빈도 기반 휴리스틱(무엇을 했나의 근사). 요청 건수는 전 소스(Cursor 포함), 도구·영역·명령은 Claude Code만.");
   lines.push("   메인 세션의 서브에이전트 디스패치만 셈 — 서브에이전트 내부 작업은 제외(무거우면 총량 과소).");
   return lines;
 }

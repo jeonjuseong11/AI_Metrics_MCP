@@ -127,8 +127,9 @@ export function analyze(
   const overall = aggregate(knownSessions);
   const totalDisplay = metricsDisplayTokens(overall);
 
-  // 내용 요약 — cost-known 세션의 digest만(cost-unknown은 content 있어도 제외 → 격리).
-  const contentDigests = knownSessions
+  // 내용 요약 — 전 소스(cost-unknown 포함). "무엇을 했나"는 활동 서술이지 비용이 아니므로
+  // Cursor 등도 포함한다(v0.14.0에서 내용 격리 해제; 비용·모델·시간 롤업은 여전히 cost-known만).
+  const contentDigests = allSessions
     .map((s) => s.content)
     .filter((c): c is SessionContentDigest => c !== undefined);
   const contentSummary = contentDigests.length > 0 ? summarizeContent(contentDigests) : undefined;

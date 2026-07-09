@@ -10,6 +10,7 @@ import { PRICING_TABLE_VERSION } from "../pricing.js";
 import type { Commit } from "../parse/git.js";
 import type { UsageAnalysis } from "./analysis.js";
 import { labelCommitType, type SituationSummary } from "./situation.js";
+import type { CommitCorrelation } from "./correlate.js";
 import { OTHER, type ContentSummary } from "./content.js";
 
 /** 모델 ID → 짧은 표시명. "claude-opus-4-8" → "Opus". */
@@ -280,6 +281,7 @@ export function renderAnalysis(
   narrative?: string,
   situation?: SituationSummary,
   heading = "AI 사용 분석",
+  correlation?: CommitCorrelation,
 ): string {
   const who = author ? ` — ${author}` : "";
   const lines: string[] = [];
@@ -409,6 +411,16 @@ export function renderAnalysis(
     lines.push(
       `ℹ️ 커밋 ${situation.total}건을 conventional-commit 타입으로 분류(휴리스틱·평가 아님). ` +
         `AI 사용과의 연결은 같은 기간이라는 시간 추정이지 커밋별 증명이 아닙니다.`,
+    );
+    lines.push("");
+  }
+
+  // 커밋 × AI 세션 시간 상관 — correlation 있을 때만(--repo). 비용 귀속 아님, 시간 겹침만.
+  if (correlation && correlation.totalCommits > 0) {
+    lines.push("## 커밋 × AI 세션 (시간 상관)");
+    lines.push(`- 커밋 ${correlation.totalCommits}건 중 ${correlation.withSession}건이 AI 세션 시간대와 겹침 (${pct(correlation.share)})`);
+    lines.push(
+      "ℹ️ 세션 시간창(±30분)과의 겹침일 뿐, 이 세션이 이 커밋을 만들었다는 인과·커밋별 비용 귀속이 아닙니다.",
     );
     lines.push("");
   }

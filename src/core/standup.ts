@@ -18,6 +18,7 @@ import { renderDraft, type DraftOptions } from "./render.js";
 import { prepareSend, summarizeAccomplishments } from "./summarize.js";
 import { prepareNarrativeSend, narrateUsage } from "./narrative.js";
 import { summarizeSituation, type SituationSummary } from "./situation.js";
+import { correlateCommits, type CommitCorrelation } from "./correlate.js";
 import type { Redaction } from "./mask.js";
 import { collectCommits } from "../fs/git.js";
 import { claudeCodeAdapter } from "../adapters/claudeCode.js";
@@ -168,6 +169,8 @@ export interface AnalysisBuildResult {
   preview?: { maskedContext: string; redactions: Redaction[] };
   /** --repo 주어졌을 때의 작업 성격(커밋 타입 분포). */
   situation?: SituationSummary;
+  /** --repo 주어졌을 때 커밋×세션 시간 상관(비용 귀속 아님). */
+  correlation?: CommitCorrelation;
 }
 
 /** collectSessions 입력 — 어댑터에 넘길 공통 수집 옵션(소스-특화 해석은 어댑터). */
@@ -262,6 +265,10 @@ export async function buildAnalysis(opts: AnalysisBuildOptions = {}): Promise<An
         if (s.total > 0) {
           situation = s;
           result.situation = s;
+        }
+        // 커밋 × 세션 시간 상관(비용 귀속 아님, 서술만).
+        if (r.commits.length > 0) {
+          result.correlation = correlateCommits(r.commits, collected.sessions);
         }
       } catch (err) {
         warnings.push(`상황 신호 수집 실패: ${(err as Error).message}`);

@@ -193,8 +193,8 @@ async function cmdMcp(): Promise<number> {
 /** analyze/retro 공통 몸통 — buildAnalysis + '무엇을 만들었나'(내용) + preview/warnings. heading만 다름. */
 async function emitAnalysis(opts: AnalysisBuildOptions, useLlm: boolean, send: boolean, heading: string): Promise<number> {
   opts.adapters = ANALYSIS_ADAPTERS; // 멀티소스(Claude Code + Cursor + Codex)
-  const { analysis, warnings, narrative, preview, situation } = await buildAnalysis(opts);
-  process.stdout.write(renderAnalysis(analysis, opts.author, narrative, situation, heading) + "\n");
+  const { analysis, warnings, narrative, preview, situation, correlation } = await buildAnalysis(opts);
+  process.stdout.write(renderAnalysis(analysis, opts.author, narrative, situation, heading, correlation) + "\n");
 
   // 무엇을 만들었나(내용 기반) — --llm 시. 원시 프롬프트+파일 경로 → 마스킹(fail-closed) → LLM 성과 서술.
   // claude 세션 원시 텍스트만 다룸(이 경로에서만). --send 아니면 dry-run으로 보낼 내용만 보여줌.

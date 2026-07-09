@@ -4,6 +4,13 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.18.0] — 2026-07-09 · `--via-claude`: 구독으로 산문(API 키 불요)
+
+`--send` 산문을 API 키 대신 **구독**(`claude --print`)으로. 신규 `llm/claudeCli.ts`가 SDK 대신
+`claude --print`를 자식 프로세스로 호출(같은 시스템 프롬프트 재사용, anthropic.ts export).
+`standup`·`analyze`·`retro`에 `--via-claude` 플래그. 미로그인·실패는 결정적 문서로 폴백.
+상세: [v0.18.0](docs/releases/v0.18.0-via-claude.md). 270 그린.
+
 ## [0.17.0] — 2026-07-09 · Gemini (Antigravity) 어댑터 (cost-unknown)
 
 Google Antigravity(Gemini IDE)가 소스로. `~/.gemini/antigravity/brain/<uuid>/*.metadata.json`의

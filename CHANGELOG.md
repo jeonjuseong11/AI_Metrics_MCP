@@ -4,6 +4,13 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.14.0] — 2026-07-09 · Cursor 내용 다이제스트 + 내용 격리 해제
+
+Cursor의 **요청(user 프롬프트)**이 "무엇을 했나" 롤업에 포함. 버블 `type===1` 텍스트 →
+`userPrompts`. `contentSummary`를 전 소스로 집계(내용 격리 해제) — **"무엇을 했나"는 활동
+서술이지 비용이 아니므로**. 비용·모델·시간 롤업은 여전히 cost-known만(오염 없음). 기존 격리
+회귀 테스트를 "포함"으로 반전. Cursor는 요청 건수만 기여(도구·파일은 후속). 상세: [v0.14.0](docs/releases/v0.14.0-cursor-content.md). 257 그린.
+
 ## [0.13.0] — 2026-07-09 · 회고 강화: memoir 내레이터 + retro MCP 도구
 
 `retro --send`가 조각 섹션이 아닌 **한 편의 회고 글**(memoir 내레이터, `AIMM_MEMOIR_MODEL`).

@@ -111,18 +111,21 @@ describe("analyze — contentSummary", () => {
     expect(a.contentSummary?.activity[0]?.category).toBe("구현");
   });
 
-  it("cost-unknown 세션에 합성 content가 있어도 내용 롤업에서 제외한다(격리 회귀)", () => {
+  // v0.14.0: 내용 격리 해제 — cost-unknown(Cursor)도 "무엇을 했나"에 포함(비용·모델·시간은 여전히 격리).
+  // "무엇을 했나"는 활동 서술이지 비용이 아니므로 전 소스 포함이 정직. (실제 Cursor는 userPrompts만 기여)
+  it("cost-unknown(Cursor) 세션의 content도 내용 롤업에 포함한다", () => {
     const a = analyze(
       [
         withContent("claude-code", { userPrompts: 1, toolUses: { Edit: 1 }, fileExts: {}, commandVerbs: {} }),
-        withContent("cursor", { userPrompts: 99, toolUses: { Bash: 99 }, fileExts: {}, commandVerbs: {} }),
+        withContent("cursor", { userPrompts: 99, toolUses: {}, fileExts: {}, commandVerbs: {} }),
       ],
       {},
       meta,
     );
-    expect(a.contentSummary?.sessionsWithContent).toBe(1); // cursor 제외
-    expect(a.contentSummary?.userPrompts).toBe(1);
-    expect(a.contentSummary?.activity.find((x) => x.category === "실행·검증")).toBeUndefined();
+    expect(a.contentSummary?.sessionsWithContent).toBe(2); // cursor 포함
+    expect(a.contentSummary?.userPrompts).toBe(100); // 1 + 99
+    // 비용/모델 격리는 유지: cursor는 비용·모델 집계 밖(providesCost=false).
+    expect(a.hasUnknownModel).toBe(false);
   });
 
   it("content 있는 세션이 없으면 contentSummary는 undefined", () => {

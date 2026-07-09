@@ -11,7 +11,7 @@ import { SummarizerError, type Summarizer } from "./summarizer.js";
 
 const DEFAULT_MODEL = "claude-haiku-4-5";
 
-const SUMMARY_SYSTEM_PROMPT = [
+export const SUMMARY_SYSTEM_PROMPT = [
   "당신은 개발자의 어제 Git 커밋 목록을 받아 일일 스크럼의 '어제 한 일' 항목으로 간결히 요약한다.",
   "규칙:",
   "- 커밋에 없는 성과·수치·지표를 절대 지어내지 말 것.",
@@ -20,7 +20,7 @@ const SUMMARY_SYSTEM_PROMPT = [
   "- 출력은 불릿 목록만. 머리말·맺음말 없이.",
 ].join("\n");
 
-const NARRATIVE_SYSTEM_PROMPT = [
+export const NARRATIVE_SYSTEM_PROMPT = [
   "당신은 개발자의 결정적으로 집계된 AI 사용 통계(사실 블록)를 받아 '이번 주 이렇게 썼다'를 짧은 한국어 산문으로 서술한다.",
   "규칙:",
   "- 사실 블록에 없는 수치·지표·성과를 절대 지어내지 말 것. 정량 주장은 블록의 값만 인용.",
@@ -32,7 +32,7 @@ const NARRATIVE_SYSTEM_PROMPT = [
   "- 표는 문서에 남으므로 숫자 나열이 아니라 패턴 해석에 집중.",
 ].join("\n");
 
-const MEMOIR_SYSTEM_PROMPT = [
+export const MEMOIR_SYSTEM_PROMPT = [
   "당신은 개발자의 결정적으로 집계된 AI 사용 사실 블록(기간·모델·시간대·프로젝트·만든것·작업성격·작업내용)을 받아,",
   "그 기간을 돌아보는 **한 편의 회고 글**로 엮는다. 조각난 섹션이 아니라 흐르는 산문.",
   "규칙:",
@@ -44,7 +44,7 @@ const MEMOIR_SYSTEM_PROMPT = [
   "- 머리말·맺음말 라벨 없이 회고 본문만.",
 ].join("\n");
 
-const BUILT_SYSTEM_PROMPT = [
+export const BUILT_SYSTEM_PROMPT = [
   "당신은 개발자가 이 기간 AI에게 보낸 요청과 다룬 파일 목록을 받아 '무엇을 만들었나/어떤 작업을 했나'를 요약한다.",
   "규칙:",
   "- 요청·파일에 없는 성과·수치를 절대 지어내지 말 것. 목록에 있는 근거로만.",

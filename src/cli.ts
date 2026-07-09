@@ -16,6 +16,8 @@ import { renderAnalysis } from "./core/render.js";
 import { renderPortrait, type PortraitOptions } from "./core/portrait.js";
 import { toKstDateString, isoDatePlusDays } from "./core/day.js";
 import { createAnthropicSummarizer, createAnthropicNarrator, createAnthropicMemoirNarrator, createAnthropicBuiltSummarizer } from "./llm/anthropic.js";
+import { createClaudeCliSummarizer, createClaudeCliNarrator, createClaudeCliMemoirNarrator, createClaudeCliBuiltSummarizer } from "./llm/claudeCli.js";
+import type { Summarizer } from "./llm/summarizer.js";
 import { discoverSessionFiles } from "./fs/discover.js";
 import { collectIntents, prepareIntentSend } from "./core/intent.js";
 import { runHook, type HookOptions } from "./core/hook.js";
@@ -53,6 +55,7 @@ function usage(): void {
       "  aimm retro [옵션]                         회고록 = 사용 패턴 + 무엇을 만들었나 한 문서(기간 기본 최근 1주)",
       "    --period week|month  기간 프리셋(--start/--end 없을 때만; 기본 week)",
       "    --write [--force]    회고를 ~/aimm/retro-<end>.md로 저장(주기 자동화용, 주간 멱등)",
+      "    --via-claude         --send 시 API 키 대신 구독(claude --print)으로 산문 생성",
       "    --start/--end/--repo/--author/--llm/--send  analyze와 동일",
       "  aimm portrait [옵션]                      공유용 AI craft 초상(텍스트+표) 생성",
       "    --start YYYY-MM-DD  시작 KST 날짜(기본: 데이터 전체)",
@@ -87,6 +90,7 @@ function parseFlags(args: string[]) {
       send: { type: "boolean" },
       write: { type: "boolean" },
       force: { type: "boolean" },
+      "via-claude": { type: "boolean" },
       "dry-run": { type: "boolean" },
     },
   });
@@ -105,9 +109,10 @@ async function cmdStandup(args: string[]): Promise<number> {
 
   const useLlm = flags.llm === true;
   const send = flags.send === true;
+  const viaClaude = flags["via-claude"] === true;
   if (useLlm) {
     opts.useLlm = true;
-    if (send) opts.summarizer = createAnthropicSummarizer();
+    if (send) opts.summarizer = viaClaude ? createClaudeCliSummarizer() : createAnthropicSummarizer();
     else opts.dryRunLlm = true;
   }
 
@@ -191,7 +196,7 @@ async function cmdMcp(): Promise<number> {
 }
 
 /** analyze/retro 공통 몸통 — buildAnalysis + '무엇을 만들었나'(내용) + preview/warnings. heading만 다름. */
-async function emitAnalysis(opts: AnalysisBuildOptions, useLlm: boolean, send: boolean, heading: string): Promise<number> {
+async function emitAnalysis(opts: AnalysisBuildOptions, useLlm: boolean, send: boolean, heading: string, viaClaude = false): Promise<number> {
   opts.adapters = ANALYSIS_ADAPTERS; // 멀티소스(Claude Code + Cursor + Codex)
   const { analysis, warnings, narrative, preview, situation, correlation } = await buildAnalysis(opts);
   process.stdout.write(renderAnalysis(analysis, opts.author, narrative, situation, heading, correlation) + "\n");
@@ -207,7 +212,8 @@ async function emitAnalysis(opts: AnalysisBuildOptions, useLlm: boolean, send: b
       const { masked, redactions } = prepareIntentSend(await collectIntents(files, window));
       if (masked.trim() !== "") {
         if (send) {
-          const built = await createAnthropicBuiltSummarizer()(masked);
+          const builtSummarizer: Summarizer = viaClaude ? createClaudeCliBuiltSummarizer() : createAnthropicBuiltSummarizer();
+          const built = await builtSummarizer(masked);
           process.stdout.write(`\n## 무엇을 만들었나 — 내용 기반 요약\n\n${built.trim()}\n`);
           if (redactions.length > 0) warnings.push(`무엇을만들었나(내용): ${redactions.length}개 비밀 가림 후 전송`);
         } else {
@@ -241,8 +247,8 @@ async function emitAnalysis(opts: AnalysisBuildOptions, useLlm: boolean, send: b
   return 0;
 }
 
-/** 공통: 플래그 → AnalysisBuildOptions + useLlm/send. */
-function analyzeOptsFromFlags(flags: ReturnType<typeof parseFlags>): { opts: AnalysisBuildOptions; useLlm: boolean; send: boolean } {
+/** 공통: 플래그 → AnalysisBuildOptions + useLlm/send/viaClaude. */
+function analyzeOptsFromFlags(flags: ReturnType<typeof parseFlags>): { opts: AnalysisBuildOptions; useLlm: boolean; send: boolean; viaClaude: boolean } {
   const opts: AnalysisBuildOptions = {};
   if (flags.start) opts.start = flags.start;
   if (flags.end) opts.end = flags.end;
@@ -252,17 +258,18 @@ function analyzeOptsFromFlags(flags: ReturnType<typeof parseFlags>): { opts: Ana
   if (flags.author) opts.author = flags.author;
   const useLlm = flags.llm === true;
   const send = flags.send === true;
+  const viaClaude = flags["via-claude"] === true; // 구독(claude --print) 경로 — API 키 불요
   if (useLlm) {
     opts.useLlm = true;
-    if (send) opts.summarizer = createAnthropicNarrator();
+    if (send) opts.summarizer = viaClaude ? createClaudeCliNarrator() : createAnthropicNarrator();
     else opts.dryRunLlm = true;
   }
-  return { opts, useLlm, send };
+  return { opts, useLlm, send, viaClaude };
 }
 
 async function cmdAnalyze(args: string[]): Promise<number> {
-  const { opts, useLlm, send } = analyzeOptsFromFlags(parseFlags(args));
-  return emitAnalysis(opts, useLlm, send, "AI 사용 분석");
+  const { opts, useLlm, send, viaClaude } = analyzeOptsFromFlags(parseFlags(args));
+  return emitAnalysis(opts, useLlm, send, "AI 사용 분석", viaClaude);
 }
 
 /** period(week=최근7일·month=최근30일) → KST 창. 명시 --start/--end가 있으면 그걸 우선. */
@@ -275,9 +282,9 @@ function retroWindow(period: string | undefined): { start: string; end: string }
 /** aimm retro — 사용 패턴 + 무엇을 만들었나를 한 회고 문서로. 기간 기본=최근 1주. */
 async function cmdRetro(args: string[]): Promise<number> {
   const flags = parseFlags(args);
-  const { opts, useLlm, send } = analyzeOptsFromFlags(flags);
+  const { opts, useLlm, send, viaClaude } = analyzeOptsFromFlags(flags);
   // 회고는 주간 요약이 아니라 '한 편의 회고 글' → 내레이터를 memoir 톤으로 교체.
-  if (send) opts.summarizer = createAnthropicMemoirNarrator();
+  if (send) opts.summarizer = viaClaude ? createClaudeCliMemoirNarrator() : createAnthropicMemoirNarrator();
   // 기간 미지정 시 회고 창(week/month)을 기본으로 채운다. 명시 --start/--end는 존중.
   if (!opts.start && !opts.end) {
     const w = retroWindow(flags.period);
@@ -299,7 +306,7 @@ async function cmdRetro(args: string[]): Promise<number> {
     return r.ok ? 0 : 1;
   }
 
-  return emitAnalysis(opts, useLlm, send, "AI 회고");
+  return emitAnalysis(opts, useLlm, send, "AI 회고", viaClaude);
 }
 
 async function cmdPortrait(args: string[]): Promise<number> {

@@ -4,6 +4,14 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.17.0] — 2026-07-09 · Gemini (Antigravity) 어댑터 (cost-unknown)
+
+Google Antigravity(Gemini IDE)가 소스로. `~/.gemini/antigravity/brain/<uuid>/*.metadata.json`의
+`updatedAt`으로 세션 시간창. **토큰·모델·프롬프트 없음** → providesCost=false(가장 얇은 소스,
+시간·세션만). 진짜 gemini-cli 로그는 이 머신에 없어(하드월) 별도 defer. 신규 `adapters/gemini.ts`,
+ANALYSIS_ADAPTERS 등록. 세션정의 caveat 일반화. 소스 5개(Claude·Codex 비용O + Cursor·Copilot·Gemini
+시간). 상세: [v0.17.0](docs/releases/v0.17.0-gemini-antigravity.md). 268 그린.
+
 ## [0.16.0] — 2026-07-09 · GitHub Copilot 어댑터 (cost-unknown)
 
 Copilot(VS Code Chat)이 소스로. `workspaceStorage/*/chatSessions/*.json` 파싱 — requests에

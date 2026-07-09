@@ -25,13 +25,14 @@ import { claudeCodeAdapter } from "../adapters/claudeCode.js";
 import { cursorAdapter } from "../adapters/cursor.js";
 import { codexAdapter } from "../adapters/codex.js";
 import { copilotAdapter } from "../adapters/copilot.js";
+import { geminiAdapter } from "../adapters/gemini.js";
 import type { CollectOptions, SourceAdapter } from "../adapters/types.js";
 import type { Commit } from "../parse/git.js";
 import type { Summarizer } from "../llm/summarizer.js";
 import type { NormalizedSession, ParseResult, ParseWarning } from "../types.js";
 
 /** analyze/portrait의 production 멀티소스 어댑터. cli·mcp analyze가 명시 주입(코어 기본은 claude-only). */
-export const ANALYSIS_ADAPTERS: SourceAdapter[] = [claudeCodeAdapter, cursorAdapter, codexAdapter, copilotAdapter];
+export const ANALYSIS_ADAPTERS: SourceAdapter[] = [claudeCodeAdapter, cursorAdapter, codexAdapter, copilotAdapter, geminiAdapter];
 
 export interface StandupOptions {
   /** KST 날짜 "YYYY-MM-DD". 없으면 now 기준 어제. */

@@ -1,6 +1,6 @@
 {
   "name": "aimm",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "AI-Metrics MCP (AIMM) — Claude Code 세션 로그 + Git 커밋 기반 스크럼 초안·AI 사용 메트릭 자동화",
   "type": "module",
   "bin": {

@@ -13,8 +13,15 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { buildStandup, buildAnalysis, ANALYSIS_ADAPTERS } from "../core/standup.js";
 import { renderAnalysis } from "../core/render.js";
+import { toKstDateString, isoDatePlusDays } from "../core/day.js";
 
 const KST_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD(KST)");
+
+/** period(week/month) → KST 창. --start/--end 없을 때 회고 기본 기간. */
+function retroWindow(period: string | undefined): { start: string; end: string } {
+  const end = toKstDateString(new Date());
+  return { start: isoDatePlusDays(end, period === "month" ? -29 : -6), end };
+}
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({ name: "aimm", version: "0.1.0" });
@@ -52,6 +59,31 @@ export function createMcpServer(): McpServer {
       opts.adapters = ANALYSIS_ADAPTERS; // analyze 도구는 멀티소스(Claude Code + Cursor)
       const { analysis } = await buildAnalysis(opts);
       return { content: [{ type: "text", text: renderAnalysis(analysis, args.author) }] };
+    },
+  );
+
+  server.tool(
+    "retro",
+    "회고록 — 사용 패턴 + 작업 성격을 한 회고 문서로(결정적, 전송 없음). 기간 기본 최근 1주.",
+    {
+      period: z.enum(["week", "month"]).optional().describe("기간 프리셋(start/end 없을 때; 기본 week)"),
+      start: KST_DATE.optional().describe("시작 KST 날짜(period보다 우선)"),
+      end: KST_DATE.optional().describe("끝 KST 날짜"),
+      repo: z.string().optional().describe("작업 성격(커밋)을 포함할 저장소 절대경로"),
+      author: z.string().optional().describe("문서 헤더"),
+    },
+    async (args) => {
+      const opts: Parameters<typeof buildAnalysis>[0] = { adapters: ANALYSIS_ADAPTERS };
+      if (args.start) opts.start = args.start;
+      if (args.end) opts.end = args.end;
+      if (!args.start && !args.end) {
+        const w = retroWindow(args.period);
+        opts.start = w.start;
+        opts.end = w.end;
+      }
+      if (args.repo) opts.repoPath = args.repo;
+      const { analysis, situation } = await buildAnalysis(opts);
+      return { content: [{ type: "text", text: renderAnalysis(analysis, args.author, undefined, situation, "AI 회고") }] };
     },
   );
 

@@ -1,11 +1,25 @@
 # AIMM — AI-Metrics MCP
 
-> Claude Code 세션 로그와 Git 커밋을 **로컬에서** 결합해
-> **일일 스크럼 초안**과 **AI 사용 메트릭**(모델·토큰·추정 비용·세션 지속시간)을
-> 자동 생성하는 사내 PoC 도구.
+> 여러 AI 코딩 도구(Claude Code · Codex · Cursor · Copilot · Gemini)의 사용 기록과
+> Git 커밋을 **로컬에서** 결합해 **AI 사용 분석 · 회고록 · 일일 스크럼 초안**을 만드는 도구.
+> 산문 요약은 API 키 또는 **구독(`--via-claude`)**으로.
 
 기획·설계 배경 전체: [AIMM_PoC_기획서_v2.md](./AIMM_PoC_기획서_v2.md)
-(office-hours → CEO 리뷰 → 엔지니어링 리뷰를 거친 제안서)
+(office-hours → CEO 리뷰 → 엔지니어링 리뷰를 거친 제안서) · 단계별: [ROADMAP.md](./ROADMAP.md)
+
+## 소스 (어댑터)
+
+| 소스 | 데이터 위치 | 비용 |
+|------|-------------|------|
+| **Claude Code** | `~/.claude/projects/**/*.jsonl` | ✅ 토큰·모델 |
+| **Codex CLI** | `~/.codex/sessions/**/rollout-*.jsonl` | ✅ 토큰·모델 |
+| **Cursor** | `state.vscdb`(SQLite) | 시간·요청 (토큰 없음) |
+| **GitHub Copilot** | VS Code `workspaceStorage/*/chatSessions/*.json` | 시간·요청·모델명 (토큰 없음) |
+| **Gemini (Antigravity)** | `~/.gemini/antigravity/brain/<uuid>/*.metadata.json` | 시간만 |
+
+비용 비교는 **Claude·Codex만**(토큰 실재). 나머지는 "비용 미상" — 시간·활동만. `SourceAdapter`
+계약(`src/adapters/`)으로 격리돼, 새 소스는 어댑터 하나 추가로 붙는다. 진짜 `gemini-cli`
+대화·토큰 로그는 로컬에 없어(하드월) 데이터 생기면 별도 어댑터.
 
 ---
 
@@ -37,19 +51,20 @@ AIMM은 **보고 시간 절감을 미끼로 도구를 매일 켜게 만들고**,
 ## 동작 방식
 
 ```
-Claude Code JSONL ─┐
-                   ├─▶ 파서 ─▶ 정규화 모델 ─┬─▶ 메트릭(결정적, LLM 우회)
-Git log ───────────┘    (단일 패스)         ├─▶ KST 일자 필터
-                                            └─▶ 렌더 ─▶ 스크럼 초안
-                                                  ▲
-                    LLM 요약 ◀─ 사용자 승인 ◀─ 마스킹(fail-closed) ◀─ 커밋 컨텍스트
+5개 소스 어댑터 ─┐
+(Claude·Codex·   ├─▶ 정규화 모델 ─┬─▶ 메트릭(결정적, LLM 우회, cost-known만)
+ Cursor·Copilot· │   (단일 패스)   ├─▶ KST 일자·시간대 롤업
+ Gemini)         │                ├─▶ 내용 다이제스트(닫힌 어휘)
+Git log ─────────┘                └─▶ 렌더 ─▶ 분석/회고/스크럼
+                                        ▲
+      산문(SDK 키 or 구독 --via-claude) ◀─ 사용자 승인 ◀─ 마스킹(fail-closed) ◀─ 사실 블록
 ```
 
-- **단일 파싱 패스**: JSONL을 한 번만 파싱해 정규화 모델(turn·model·tokens·timestamp)을
-  만들고 메트릭·매칭·렌더가 공유한다(DRY).
-- **메트릭은 LLM을 거치지 않는다**: 토큰 합 × 단가(캐시 반영)로 로컬 계산 후 초안에 주입.
-- 현재 "어제 한 일"은 커밋 목록(해시 근거 포함) 형태다. LLM 요약은 그 위에 얹는 다음 단계이며,
-  LLM 실패 시 이 형태가 그대로 안전한 폴백이 된다.
+- **단일 파싱 패스**: 각 어댑터가 한 번만 파싱해 정규화 모델(model·tokens·timestamp·content)을
+  만들고 메트릭·롤업·렌더가 공유한다(DRY).
+- **메트릭은 LLM을 거치지 않는다**: 토큰 합 × 단가(캐시 반영)로 로컬 계산 후 문서에 주입.
+  cost-unknown 소스(Cursor·Copilot·Gemini)는 비용·모델 롤업에서 격리(오염 없음).
+- **산문은 선택**: 결정적 문서가 기본, `--llm --send`로 산문을 얹는다. 실패 시 결정적 폴백.
 
 ## 설치 & 사용
 
@@ -120,15 +135,26 @@ ANTHROPIC_API_KEY=sk-ant-... npx tsx src/cli.ts standup --repo /path/to/repo --l
 요약 실패(키 없음·타임아웃·빈 응답)는 자동으로 커밋 목록 폴백 + 에러 노트로 떨어진다(§4.4).
 요약 모델은 `AIMM_SUMMARY_MODEL`로 바꿀 수 있다.
 
+**구독으로 (API 키 불요) — `--via-claude`:** `--send`에 `--via-claude`를 붙이면 Anthropic SDK
+(종량제 키) 대신 `claude --print`(Claude Code CLI = 구독 인증)로 산문을 낸다. `claude`가
+로그인돼 있어야 하고, 미로그인·실패는 결정적 문서로 폴백한다. `standup`·`analyze`·`retro` 공통.
+
+```bash
+# 키 없이, 구독으로
+node dist/cli.js standup --repo /path --llm --send --via-claude
+```
+
 ### 개인 AI 사용 분석 문서
 
 ```bash
 npx tsx src/cli.ts analyze --author "이름" --start 2026-06-01 --end 2026-06-10
 ```
 
-모델 믹스·일자별 비용 추세·시간대(KST) 분포·프로젝트별·가장 활발한 날을
-결정적으로 계산해 마크다운으로 낸다. **기본은 결정적-only**(LLM·API 불요). "내가
-평소에 AI를 어떻게 쓰는지"를 보여주는 셀프 리뷰 자료(평가가 아닌 서술).
+**멀티소스**(5개 어댑터) 결정적 분석. 섹션: 요약 · 모델 믹스 · 일자별 비용 추세 ·
+시간대(KST) · 프로젝트별 · **도구별 사용(5소스)** · **무엇을 했나**(활동·영역·명령·요청,
+닫힌 어휘) · **무엇을 만들었나**(`--repo` 시 커밋 성과) · **작업 성격**(커밋 타입) ·
+**커밋 × AI 세션 시간 상관**(`--repo`, 비용 귀속 아님). **기본은 결정적-only**(LLM·API 불요).
+"내가 평소에 AI를 어떻게 쓰는지" 셀프 리뷰 자료(평가가 아닌 서술).
 
 `--llm`을 붙이면 standup과 동일한 전송 경계로 **주간 내러티브 산문**을 더한다.
 **기본은 드라이런** — 마스킹을 거쳐 LLM에 보낼 결정적 "사실 블록"과 가림 건수만
@@ -141,23 +167,27 @@ npx tsx src/cli.ts analyze --author "이름" --start 2026-06-01 --end 2026-06-10
 # 드라이런: 보낼 사실 블록 + 가림 건수만(전송 안 함)
 npx tsx src/cli.ts analyze --start 2026-06-08 --end 2026-06-14 --llm
 
-# 실제 전송(저가 모델 haiku, ANTHROPIC_API_KEY 필요)
-ANTHROPIC_API_KEY=sk-ant-... npx tsx src/cli.ts analyze --start 2026-06-08 --end 2026-06-14 --llm --send
+# 실제 전송 — API 키
+ANTHROPIC_API_KEY=sk-ant-... node dist/cli.js analyze --repo /path --start 2026-06-08 --end 2026-06-14 --llm --send
+# 또는 구독으로(키 불요)
+node dist/cli.js analyze --repo /path --start 2026-06-08 --end 2026-06-14 --llm --send --via-claude
 ```
 
-> MCP `analyze` 도구는 결정적 문서만 반환한다(외부 전송 없음) — 산문은 CLI `--send` 전용.
+> MCP `standup`·`analyze`·`retro` 도구는 결정적 문서만 반환한다(외부 전송 없음) — 산문은 CLI `--send` 전용.
 
 ### 회고록 (retro)
 
 사용 패턴 + "무엇을 만들었나"를 **한 회고 문서**로. 기간 기본 = 최근 1주.
 
 ```bash
-npx tsx src/cli.ts retro --period week            # 또는 --period month
-npx tsx src/cli.ts retro --repo /path --llm --send  # 무엇을 만들었나(내용) 프로즈까지
+node dist/cli.js retro --period week                       # 또는 --period month, 결정적
+node dist/cli.js retro --repo /path --llm --send           # memoir 회고 산문(API 키)
+node dist/cli.js retro --repo /path --llm --send --via-claude   # 구독으로(키 불요)
 ```
 
 `analyze`와 같은 엔진(멀티소스·전송 경계)에 회고 프레이밍만 얹은 것이다. `--repo`면
-작업 성격·만든 것까지, `--llm --send`면 산문 회고.
+작업 성격·만든 것까지, `--llm --send`면 **한 편의 회고 글(memoir 톤)**. 주간 요약 톤인
+`analyze --send`와 달리 흐르는 산문으로 엮는다.
 
 **주간 자동 생성** — `--write`가 `~/aimm/retro-<end>.md`에 저장한다(결정적·주간 멱등:
 같은 창 파일 있으면 skip, `--force`로 덮어씀). OS 스케줄러가 주 1회 호출하면 회고가 쌓인다:
@@ -217,7 +247,7 @@ $ aimm today
 세션이 끝날 때마다 `~/aimm/draft-<date>.md`에 초안이 생성된다. 실패해도 같은
 파일에 에러 노트를 남겨 조용히 죽지 않는다(§4.4).
 
-**② MCP 서버 (`/standup`·`/analyze` 도구)**:
+**② MCP 서버 (`standup`·`analyze`·`retro` 도구)**:
 
 ```bash
 claude mcp add aimm -- node <ABS>/dist/cli.js mcp
@@ -229,8 +259,8 @@ claude mcp add aimm -- node <ABS>/dist/cli.js mcp
 { "mcpServers": { "aimm": { "command": "node", "args": ["<ABS>/dist/cli.js", "mcp"] } } }
 ```
 
-등록 후 Claude Code 안에서 standup/analyze 도구를 호출할 수 있다(결정적 결과,
-외부 전송 없음).
+등록 후 Claude Code 안에서 standup·analyze·**retro** 도구를 호출할 수 있다(결정적 결과,
+외부 전송 없음 — 산문은 CLI `--send`/`--via-claude` 전용).
 
 ## 메트릭 상세
 
@@ -280,56 +310,51 @@ fail-closed를 검증한다.
 ```
 src/
   types.ts            정규화 모델(단일 파싱 패스의 계약)
-  pricing.ts          단가 테이블(캐시 반영, 버전 명시)
+  pricing.ts          단가 테이블(캐시 반영, 버전 명시; Anthropic·GPT)
+  adapters/           소스 어댑터(SourceAdapter 계약)
+    types.ts          계약(id·displayName·providesCost·collect)
+    claudeCode.ts · codex.ts · cursor.ts · copilot.ts · gemini.ts
   parse/
-    claudeCode.ts     JSONL 파서(어댑터, 손상 레코드 skip+warn)
-    git.ts            git log 파서(순수 함수)
+    claudeCode.ts     Claude JSONL 파서(내용 다이제스트 포함)
+    codex.ts          Codex rollout 파서 / git.ts  git log 파서
   core/
     metrics.ts        결정적 토큰·비용 집계(LLM 우회)
-    day.ts            KST day boundary
+    analysis.ts       멀티소스 분석 롤업(모델·추세·시간대·프로젝트·도구별·내용)
+    content.ts        내용 다이제스트 분류(닫힌 어휘) / day.ts  KST 경계·요일
     mask.ts           비밀 마스킹(gitleaks 룰셋, fail-closed)
-    analysis.ts       개인 사용 분석 롤업(모델 믹스·추세·시간대·프로젝트·내용 요약)
-    content.ts        세션 내용 다이제스트 분류·롤업(결정적, 닫힌 어휘)
-    summarize.ts      "어제 한 일" 요약 + 마스킹 전송 경계
-    render.ts         초안·메트릭·분석 렌더(빈/에러 상태)
-    standup.ts        오케스트레이터(CLI/hook/MCP 공유 코어)
-    hook.ts           SessionEnd hook 진입(초안을 파일로, 실패 시 에러 노트)
-    init.ts           aimm init(hook·MCP 자동 등록, 센티넬 멱등·백업)
+    situation.ts      커밋 타입·만든것 / correlate.ts  커밋×세션 시간 상관
+    patterns.ts · insight.ts · findings.ts   사용 패턴 발견
+    intent.ts         원시 요청·파일 추출 + 마스킹(무엇을 만들었나 내용)
+    narrative.ts      주간 서술 전송 경계 / summarize.ts  "어제 한 일"
+    portrait.ts       공유용 craft 초상 / render.ts  전 문서 렌더
+    standup.ts        오케스트레이터(buildStandup/buildAnalysis, ANALYSIS_ADAPTERS)
+    retro.ts          회고 파일 저장(주간 멱등) / hook.ts  SessionEnd
+    sessionStart.ts   SessionStart 거울 · aimm today / init.ts  자동 등록
   llm/
-    summarizer.ts     Summarizer 인터페이스 + 에러(DI)
-    anthropic.ts      실제 Anthropic 요약기(haiku, env 키)
-  mcp/
-    server.ts         MCP 서버(/standup·/analyze 도구)
-  fs/
-    sessions.ts       세션 JSONL 읽기
-    git.ts            git 수집(child_process)
-    discover.ts       세션 파일 발견(~/.claude/projects)
-  cli.ts              진입점: metrics / standup / analyze / portrait / init / hook / session-start / today / mcp
-test/                 30개 파일, 248 테스트
+    summarizer.ts     Summarizer 인터페이스(DI)
+    anthropic.ts      Anthropic SDK 요약기(env 키)
+    claudeCli.ts      claude --print 요약기(구독, --via-claude)
+  mcp/server.ts       MCP 서버(standup·analyze·retro 도구)
+  fs/                 sessions·git·discover (디스크 I/O)
+  cli.ts              진입점: metrics/standup/analyze/retro/portrait/today/session-start/hook/init/mcp
+test/                 34개 파일, 270 테스트
 ```
 
 ## 상태 & 로드맵
 
-**완료:** 파서 · 결정적 메트릭(캐시 반영) · 마스킹(fail-closed, 적대 테스트) ·
-KST 일자 · 렌더(빈/에러 상태) · standup 오케스트레이터 · 개인 사용 분석(analyze) ·
-LLM 요약/내러티브 + 마스킹 전송 경계(드라이런/--send, 폴백) · 멀티소스 어댑터(Cursor) ·
-**세션 내용 요약**(analyze/portrait/narrative에 "무엇을 했나" — 결정적 닫힌-어휘) ·
-**진입점(SessionEnd hook · MCP 서버 · `aimm init`)** ·
-**SessionStart 거울**(`aimm session-start` — 매일 Claude Code 시작 시 한 줄, 어제 영역 share% 포함) ·
-**`aimm today`**(세션 밖 3축 풀뷰, `--repo`면 오늘 만든 것) ·
-**"무엇을 만들었나"**(`analyze --repo` — feat/fix/refactor/perf 커밋 성과 ↔ 기간 비용;
-`analyze --llm --send` — 요청·파일 원시 텍스트 → 마스킹 → LLM 내용 기반 요약, basename·노이즈필터·dry-run) ·
-parse-once 수집(startup 상수화) · CLI. **248 테스트 그린.**
+**완료 (v0.18.0):** 결정적 메트릭(캐시 반영) · 마스킹(fail-closed, 적대 테스트) · KST 일자 ·
+**멀티소스 5개 어댑터**(Claude·Codex 비용O + Cursor·Copilot·Gemini 시간) · 개인 사용 분석
+(analyze) · **회고록(retro + memoir + 주간 자동 `--write`)** · 세션 내용 요약("무엇을 했나") ·
+"무엇을 만들었나"(커밋 성과 + 내용 기반) · 사용 패턴 발견 · **커밋×세션 시간 상관**(비용 귀속 아님) ·
+craft 초상(portrait) · SessionStart 거울 · `aimm today` · 진입점(SessionEnd hook · MCP `standup/analyze/retro`
+· `aimm init`) · **산문 경로 2가지: API 키 / 구독(`--via-claude`)**. **270 테스트 그린.**
 
-**다음 (마이너):**
-- `.aimm-ignore` 파서(민감 저장소 수집 제외), 주제 키워드 추출(마스킹 검토 후)
+**다음:** `gemini-cli` 진짜 로그(데이터 생기면) · Cursor·Copilot 내용 다이제스트 심화 ·
+`.aimm-ignore` 파서 · **Phase 3 설치형**(office-hours로 스코프).
 
-**단계별 발전 방향:** [ROADMAP.md](./ROADMAP.md) 참고.
-Phase 1(단일 LLM 분석 심화) → Phase 2(멀티 LLM, 로컬 로그 우선) →
-Phase 3(설치형 프로그램으로 PC 전체 LLM 사용 분석 — 무엇을·언제·어떤 상황에).
-
-**후속(PoC 범위 밖):** 멀티-AI 메트릭(Cursor·ChatGPT·Gemini), 경영 대시보드,
-구독 의사결정용 사용·비용 통계(옵트인 익명 집계).
+**단계별 발전 방향:** [ROADMAP.md](./ROADMAP.md).
+Phase 1(단일 LLM 분석 심화, 완료) → Phase 2(멀티 LLM, 5소스 진행) →
+Phase 3(설치형으로 PC 전체 LLM 사용 분석 — 무엇을·언제·어떤 상황에).
 
 ## 어떻게 만들었나 — AI 페어링
 

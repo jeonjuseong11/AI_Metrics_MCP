@@ -4,6 +4,13 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.13.0] — 2026-07-09 · 회고 강화: memoir 내레이터 + retro MCP 도구
+
+`retro --send`가 조각 섹션이 아닌 **한 편의 회고 글**(memoir 내레이터, `AIMM_MEMOIR_MODEL`).
+`buildNarrativeContext`가 이미 모든 재료를 한 블록으로 모으고 있어 프롬프트 스왑 + 배선만.
+`retro`를 **MCP 도구**로 노출(standup·analyze·retro) — Claude Code 안에서 회고 호출(결정적).
+상세: [v0.13.0](docs/releases/v0.13.0-retro-memoir.md). 257 그린.
+
 ## [0.12.0] — 2026-07-09 · 회고록(retro) + 주간 자동 생성
 
 사용 패턴 + "무엇을 만들었나"를 한 회고 문서로. 신규 `aimm retro`(기간 기본 최근 1주,

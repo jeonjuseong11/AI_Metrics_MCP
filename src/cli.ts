@@ -15,7 +15,7 @@ import { buildStandup, buildAnalysis, ANALYSIS_ADAPTERS, type StandupOptions, ty
 import { renderAnalysis } from "./core/render.js";
 import { renderPortrait, type PortraitOptions } from "./core/portrait.js";
 import { toKstDateString, isoDatePlusDays } from "./core/day.js";
-import { createAnthropicSummarizer, createAnthropicNarrator, createAnthropicBuiltSummarizer } from "./llm/anthropic.js";
+import { createAnthropicSummarizer, createAnthropicNarrator, createAnthropicMemoirNarrator, createAnthropicBuiltSummarizer } from "./llm/anthropic.js";
 import { discoverSessionFiles } from "./fs/discover.js";
 import { collectIntents, prepareIntentSend } from "./core/intent.js";
 import { runHook, type HookOptions } from "./core/hook.js";
@@ -276,6 +276,8 @@ function retroWindow(period: string | undefined): { start: string; end: string }
 async function cmdRetro(args: string[]): Promise<number> {
   const flags = parseFlags(args);
   const { opts, useLlm, send } = analyzeOptsFromFlags(flags);
+  // 회고는 주간 요약이 아니라 '한 편의 회고 글' → 내레이터를 memoir 톤으로 교체.
+  if (send) opts.summarizer = createAnthropicMemoirNarrator();
   // 기간 미지정 시 회고 창(week/month)을 기본으로 채운다. 명시 --start/--end는 존중.
   if (!opts.start && !opts.end) {
     const w = retroWindow(flags.period);

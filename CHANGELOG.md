@@ -4,6 +4,14 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.11.0] — 2026-07-09 · Codex CLI 어댑터 — 진짜 멀티-LLM 비용 비교 (Phase 2)
+
+Claude Code에 이어 **Codex CLI**를 소스로 추가. `~/.codex/sessions/**/rollout-*.jsonl`에서
+모델·토큰이 실재해 **providesCost=true** — Cursor(비용 미상)와 달리 "Claude vs Codex" 도구 간
+**실제 비용 비교**가 성립한다. 신규 `parse/codex.ts`(token_count·turn_context·도구 정규화),
+`adapters/codex.ts`(재귀 발견), `pricing.ts` GPT 단가, `ANALYSIS_ADAPTERS` 등록.
+닫힌 어휘 다이제스트·어댑터 격리·비용 정직성 원칙 유지. 상세: [v0.11.0](docs/releases/v0.11.0-codex-adapter.md). 253 테스트 그린.
+
 ## [0.10.0] — 2026-07-05 · 무엇을 만들었나 — 내용 기반(요청·파일 → LLM)
 
 git 커밋(v0.9.0)을 넘어 **실제 프롬프트·다룬 파일을 읽고** "무엇을 만들었나"를 LLM이 서술한다.

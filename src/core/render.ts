@@ -18,6 +18,8 @@ export function shortModelName(model: string): string {
   if (m.includes("opus")) return "Opus";
   if (m.includes("sonnet")) return "Sonnet";
   if (m.includes("haiku")) return "Haiku";
+  if (m.includes("fable")) return "Fable";
+  if (m.includes("codex") || m.includes("gpt")) return "Codex";
   return model;
 }
 

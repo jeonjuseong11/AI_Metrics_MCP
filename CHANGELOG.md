@@ -4,6 +4,13 @@
 버전은 각 EXPANSION 항목(E1~)마다 minor를 올린다. 상세 릴리스 노트는 `docs/releases/`에 있다.
 작성 규칙·템플릿: [docs/releases/README.md](docs/releases/README.md).
 
+## [0.16.0] — 2026-07-09 · GitHub Copilot 어댑터 (cost-unknown)
+
+Copilot(VS Code Chat)이 소스로. `workspaceStorage/*/chatSessions/*.json` 파싱 — requests에
+`message.text`·`timestamp`·`modelId`. **토큰 없음** → Cursor식 providesCost=false(시간·요청·모델명,
+비용·모델 롤업 제외). "도구별 사용"+"무엇을 했나(요청)"에 등장. 신규 `adapters/copilot.ts`,
+ANALYSIS_ADAPTERS 등록(claude·cursor·codex·copilot). 상세: [v0.16.0](docs/releases/v0.16.0-copilot-adapter.md). 265 그린.
+
 ## [0.15.0] — 2026-07-09 · 커밋 × AI 세션 시간 상관 (비용 귀속 아님)
 
 "이 커밋 즈음 AI 세션이 있었나"를 **시간 겹침**으로. **커밋별 비용 귀속은 안 함**(v0.9.0의
